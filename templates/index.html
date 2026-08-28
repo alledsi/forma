@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FORMA — UM-ACEP</title>
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='logo_acep.png') }}">
+<style>
+  :root {
+    --primary: rgb(2, 86, 74);
+    --primary-dark: rgb(1, 60, 51);
+    --primary-light: #e6f2ec;
+    --bg: #f4f6f5;
+    --border: #d8ddda;
+    --text: #1e2622;
+    --muted: #6b7873;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--bg);
+    margin: 0;
+    color: var(--text);
+  }
+  .hidden { display: none !important; }
+
+  header.topbar {
+    background: var(--primary);
+    color: white;
+    padding: 18px 32px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  header.topbar img.logo {
+    width: 40px;
+    height: 40px;
+    background: white;
+    border-radius: 8px;
+    padding: 4px;
+  }
+  header.topbar h1 { margin: 0; font-size: 20px; }
+  header.topbar p { margin: 4px 0 0; opacity: 0.85; font-size: 14px; }
+
+  main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 36px 20px 60px;
+  }
+  .screen-title { font-size: 20px; font-weight: 700; margin: 0 0 4px; }
+  .screen-sub { color: var(--muted); font-size: 14px; margin: 0 0 26px; }
+
+  .back-link {
+    background: none; border: none; color: var(--muted); cursor: pointer;
+    font-size: 13px; margin-bottom: 18px; display: inline-flex; align-items: center;
+    gap: 6px; padding: 0;
+  }
+  .back-link:hover { color: var(--primary); }
+
+  /* MENU — cartes de documents */
+  .doc-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+  }
+  .doc-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 26px 22px;
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  .doc-card:hover {
+    border-color: var(--primary);
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px rgba(11, 93, 59, 0.12);
+  }
+  .doc-card .icon { font-size: 28px; margin-bottom: 12px; }
+  .doc-card h3 { margin: 0 0 8px; font-size: 15px; }
+  .doc-card p { margin: 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+  /* FORMULAIRE */
+  .form-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px 32px;
+    max-width: 640px;
+  }
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin: 16px 0 6px;
+    color: #33403a;
+  }
+  label:first-child { margin-top: 0; }
+  input {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  input:focus { outline: none; border-color: var(--primary); }
+
+  button {
+    background: var(--primary);
+    color: white;
+    border: none;
+    padding: 11px 22px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: var(--primary-dark); }
+  button:disabled { background: #9aa8a2; cursor: not-allowed; }
+  .btn-secondary {
+    background: white;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+  }
+  .btn-secondary:hover { background: var(--primary-light); }
+
+  .actions { display: flex; gap: 10px; margin-top: 24px; }
+  #status { margin-top: 14px; font-size: 13px; }
+  #status.error { color: #b3261e; }
+  #status.success { color: var(--primary); }
+
+  /* APERÇU */
+  #previewArea {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 28px 34px;
+    background: #fff;
+    font-size: 14px;
+    line-height: 1.3;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  #previewArea table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+  #previewArea td { border: 1px solid #999; padding: 6px 8px; vertical-align: top; }
+  #previewArea p { margin: 6px 0; }
+
+  /* Impression : uniquement la zone d'aperçu, sur une seule page,
+     avec les couleurs de fond conservées — mais fond de page blanc. */
+  @media print {
+    @page { size: A4; margin: 1.1cm 1.9cm 0.9cm 1.9cm; }
+    html, body {
+      height: auto !important; min-height: 0 !important;
+      background: #fff !important; overflow: visible !important;
+    }
+    main { padding: 0 !important; margin: 0 !important; max-width: none !important; }
+    header.topbar, .back-link, .screen-title, .screen-sub, #status,
+    #result-toolbar, #result-toolbar-bottom, #screen-menu, #screen-form { display: none !important; }
+    #screen-result { margin: 0 !important; padding: 0 !important; }
+    #previewArea {
+      border: none; padding: 0; margin: 0; border-radius: 0; background: #fff;
+      -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact;
+    }
+    #previewArea * { -webkit-print-color-adjust: exact; print-color-adjust: exact; color-adjust: exact; }
+    #previewArea > *:last-child,
+    #previewArea > *:last-child * { margin-bottom: 0 !important; }
+  }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <img class="logo" src="{{ url_for('static', filename='logo_acep.png') }}" alt="Logo UM-ACEP">
+  <div>
+    <h1>FORMA</h1>
+    <p>Sélectionnez un type de document, remplissez les informations, puis prévisualisez et imprimez.</p>
+  </div>
+</header>
+
+<main>
+
+  <!-- MENU -->
+  <section id="screen-menu">
+    <h2 class="screen-title">Choisissez un type de document</h2>
+    <p class="screen-sub">Cliquez sur l'attestation que vous souhaitez générer.</p>
+    <div class="doc-grid">
+      {% for key, cfg in doc_types.items() %}
+      <div class="doc-card" data-type="{{ key }}">
+        <div class="icon">{{ cfg.icon }}</div>
+        <h3>{{ cfg.label }}</h3>
+        <p>{{ cfg.description }}</p>
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <!-- FORMULAIRE -->
+  <section id="screen-form" class="hidden">
+    <button class="back-link" id="form-back">← Retour au menu</button>
+    <h2 class="screen-title" id="form-title">Données du document</h2>
+    <p class="screen-sub">Remplissez les informations du titulaire.</p>
+    <div class="form-card">
+      <div id="fields"></div>
+      <div class="actions">
+        <button id="generateBtn">Prévisualiser le document</button>
+      </div>
+      <div id="status"></div>
+    </div>
+  </section>
+
+  <!-- RÉSULTAT / APERÇU -->
+  <section id="screen-result" class="hidden">
+    <div id="result-toolbar">
+      <button class="back-link" id="result-back">← Modifier les données</button>
+      <h2 class="screen-title">Aperçu (lecture seule — non modifiable, non téléchargeable)</h2>
+    </div>
+    <div id="previewArea"></div>
+    <div class="actions" id="result-toolbar-bottom">
+      <button id="printBtn">Imprimer</button>
+      <button class="btn-secondary" id="newDocBtn">Nouveau document</button>
+    </div>
+  </section>
+
+</main>
+
+<script>
+const DOC_TYPES = {{ doc_types | tojson }};
+
+const screens = {
+  menu: document.getElementById('screen-menu'),
+  form: document.getElementById('screen-form'),
+  result: document.getElementById('screen-result'),
+};
+function showScreen(name) {
+  Object.values(screens).forEach(s => s.classList.add('hidden'));
+  screens[name].classList.remove('hidden');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+const fieldsDiv = document.getElementById('fields');
+const generateBtn = document.getElementById('generateBtn');
+const status = document.getElementById('status');
+const previewArea = document.getElementById('previewArea');
+const printBtn = document.getElementById('printBtn');
+const formTitle = document.getElementById('form-title');
+
+let currentType = null;
+
+document.querySelectorAll('.doc-card').forEach(card => {
+  card.addEventListener('click', () => {
+    currentType = card.dataset.type;
+    renderForm(currentType);
+    showScreen('form');
+  });
+});
+
+function renderForm(key) {
+  const cfg = DOC_TYPES[key];
+  formTitle.textContent = cfg.label;
+  fieldsDiv.innerHTML = '';
+  status.textContent = '';
+  status.className = '';
+  cfg.fields.forEach(([fieldKey, fieldLabel, fieldType]) => {
+    const label = document.createElement('label');
+    label.textContent = fieldLabel;
+    label.setAttribute('for', 'f_' + fieldKey);
+    const input = document.createElement('input');
+    input.type = fieldType;
+    input.id = 'f_' + fieldKey;
+    input.dataset.key = fieldKey;
+    fieldsDiv.appendChild(label);
+    fieldsDiv.appendChild(input);
+  });
+}
+
+document.getElementById('form-back').addEventListener('click', () => showScreen('menu'));
+document.getElementById('result-back').addEventListener('click', () => showScreen('form'));
+document.getElementById('newDocBtn').addEventListener('click', () => {
+  currentType = null;
+  previewArea.innerHTML = '';
+  showScreen('menu');
+});
+
+generateBtn.addEventListener('click', async () => {
+  if (!currentType) return;
+
+  const data = {};
+  document.querySelectorAll('#fields input').forEach(input => {
+    data[input.dataset.key] = input.value;
+  });
+
+  generateBtn.disabled = true;
+  generateBtn.textContent = 'Génération...';
+  status.textContent = '';
+  status.className = '';
+
+  try {
+    const res = await fetch('/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: currentType, data })
+    });
+
+    const payload = await res.json();
+    if (!res.ok) {
+      throw new Error(payload.error || 'Erreur inconnue');
+    }
+
+    // Affichage en lecture seule : aucun lien de téléchargement n'est créé.
+    previewArea.innerHTML = payload.html;
+    showScreen('result');
+  } catch (e) {
+    status.textContent = 'Erreur : ' + e.message;
+    status.className = 'error';
+  } finally {
+    generateBtn.disabled = false;
+    generateBtn.textContent = 'Prévisualiser le document';
+  }
+});
+
+printBtn.addEventListener('click', () => {
+  window.print();
+});
+</script>
+</body>
+</html>

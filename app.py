@@ -1,8 +1,11 @@
 """
-Plateforme de génération de documents UM-ACEP — prototype.
-Lancer avec : python app.py
-Puis ouvrir : http://localhost:5000
+FORMA — Plateforme de génération de documents UM-ACEP.
+
+Dev local :   python app.py
+Production :  gunicorn -w 3 -b 0.0.0.0:4444 app:app
 """
+import os
+
 from flask import Flask, render_template, request, jsonify
 from doc_engine import DOC_TYPES, generate_preview_html
 
@@ -43,4 +46,7 @@ def preview():
 
 
 if __name__ == "__main__":
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 4444))
+    # debug=False : ce process ne doit pas être utilisé tel quel en production,
+    # préférer Gunicorn (voir README / service systemd).
+    app.run(debug=False, host="0.0.0.0", port=port)

@@ -1,0 +1,15 @@
+[Unit]
+Description=FORMA - Plateforme de generation de documents UM-ACEP
+After=network.target
+
+[Service]
+# À adapter : utilisateur système et chemin d'installation sur le serveur
+User=REMPLACER_PAR_TON_USER
+WorkingDirectory=/chemin/vers/acep_platform
+Environment="PORT=4444"
+ExecStart=/chemin/vers/acep_platform/venv/bin/gunicorn -w 3 -b 0.0.0.0:4444 app:app
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

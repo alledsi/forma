@@ -126,9 +126,12 @@
   .btn-secondary:hover { background: var(--primary-light); }
 
   .actions { display: flex; gap: 10px; margin-top: 24px; }
-  #status, #kycStatus { margin-top: 14px; font-size: 13px; }
-  #status.error, #kycStatus.error { color: #b3261e; }
-  #status.success, #kycStatus.success { color: var(--primary); }
+  #status, #kycStatus, #kycSearchStatus { margin-top: 14px; font-size: 13px; }
+  #status.error, #kycStatus.error, #kycSearchStatus.error {
+    color: #b3261e; background: #fdecea; border: 1px solid #f5c2c0;
+    border-radius: 6px; padding: 10px 12px; font-weight: 600;
+  }
+  #status.success, #kycStatus.success, #kycSearchStatus.success { color: var(--primary); }
 
   /* CONNEXION */
   .login-wrap {
@@ -670,6 +673,17 @@ kycSearchBtn.addEventListener('click', async () => {
     kycSearchStatus.className = 'error';
     return;
   }
+
+  // Important : ouvrir l'onglet TOUT DE SUITE, de façon synchrone, pendant le
+  // clic. Si on attend le retour des appels réseau pour appeler window.open,
+  // la plupart des navigateurs le bloquent silencieusement (aucune erreur
+  // visible, "il ne se passe rien") car ce n'est plus vu comme une action
+  // directement déclenchée par l'utilisateur.
+  let pdfWindow = null;
+  if (KYC_DIRECT_TO_PDF) {
+    pdfWindow = window.open('', '_blank');
+  }
+
   kycSearchBtn.disabled = true;
   kycSearchBtn.textContent = 'Recherche...';
   kycSearchStatus.textContent = '';
@@ -682,7 +696,14 @@ kycSearchBtn.addEventListener('click', async () => {
       body: JSON.stringify({ matricule })
     });
     const payload = await res.json();
-    if (!res.ok) throw new Error(payload.error || 'Erreur inconnue');
+    if (!res.ok) {
+      // Message explicite pour le cas le plus courant : client introuvable
+      // (renvoyé par le serveur avec le statut 404).
+      const msg = res.status === 404
+        ? (payload.error || `Aucun client trouvé pour le matricule "${matricule}".`)
+        : (payload.error || 'Erreur inconnue.');
+      throw new Error(msg);
+    }
 
     if (KYC_DIRECT_TO_PDF) {
       kycSearchBtn.textContent = 'Génération du PDF...';
@@ -703,11 +724,17 @@ kycSearchBtn.addEventListener('click', async () => {
       });
       if (!pdfRes.ok) {
         const errPayload = await pdfRes.json().catch(() => ({}));
-        throw new Error(errPayload.error || 'Erreur de génération du PDF');
+        throw new Error(errPayload.error || 'Erreur de génération du PDF.');
       }
       const blob = await pdfRes.blob();
       const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      if (pdfWindow) {
+        pdfWindow.location.href = url;
+      } else {
+        // Le navigateur a quand même bloqué l'ouverture d'un nouvel onglet :
+        // on ouvre le PDF dans l'onglet courant plutôt que de rester bloqué.
+        window.location.href = url;
+      }
       return;
     }
 
@@ -722,7 +749,8 @@ kycSearchBtn.addEventListener('click', async () => {
     kycStatus.className = '';
     showScreen('kycForm');
   } catch (e) {
-    kycSearchStatus.textContent = 'Erreur : ' + e.message;
+    if (pdfWindow) pdfWindow.close();
+    kycSearchStatus.textContent = e.message;
     kycSearchStatus.className = 'error';
   } finally {
     kycSearchBtn.disabled = false;

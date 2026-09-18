@@ -6,12 +6,17 @@ Production :  gunicorn -w 3 -b 0.0.0.0:4444 app:app
 """
 import datetime
 import os
+import time
 
-from flask import Flask, render_template, request, jsonify, Response
+from flask import Flask, render_template, request, jsonify, Response, session, redirect
 from doc_engine import DOC_TYPES, generate_preview_html
 from kyc_render import render_kyc_html, generate_kyc_pdf
 
 app = Flask(__name__)
+# Nécessaire pour signer le cookie de session utilisé par le lien
+# /kyc-morale/<matricule> (voir plus bas). Valeur par défaut générée
+# aléatoirement ; peut être surchargée via FLASK_SECRET_KEY sur le serveur.
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "83BfICCzQKxJ3DWro3_pJEc2lIBWDi8a3mvbWWO5Ksg")
 
 
 def _map_client_to_form(client):
@@ -217,26 +222,9 @@ def kyc_mint_token():
     return jsonify({"token": token, "path": f"/kyc/pdf/{token}", "expires_in": ttl_seconds})
 
 
-@app.route("/kyc/pdf/<token>", methods=["GET"])
-def kyc_pdf_by_token(token):
-    """
-    Lien direct destiné à l'utilisateur final : GET /kyc/pdf/<token>. Le
-    <token> n'est PAS le matricule (voir kyc_token.py) — il est vérifié puis
-    décodé pour retrouver le matricule, ce qui empêche un utilisateur de
-    modifier le lien pour consulter la fiche d'un autre client.
-    Va ensuite chercher les données dans Oracle ACE et ouvre directement le
-    PDF de la fiche KYC, sans passer par l'écran de recherche/édition.
-    Contrairement au parcours normal, les données ne sont donc pas
-    relues/éditées avant impression ici : elles sortent telles quelles de la
-    base.
-    """
+def _kyc_pdf_response_for_matricule(matricule):
+    """Logique commune : matricule -> lookup Oracle -> PDF (ou page d'erreur)."""
     from kyc_data import get_kyc_data, ClientIntrouvable, ClientPersonnePhysique
-    from kyc_token import verify_kyc_token
-
-    try:
-        matricule = verify_kyc_token(token)
-    except ValueError as e:
-        return _kyc_error_page(str(e), 403)
 
     try:
         raw = get_kyc_data(matricule)
@@ -272,6 +260,67 @@ def kyc_pdf_by_token(token):
         mimetype="application/pdf",
         headers={"Content-Disposition": f"inline; filename=fiche_kyc_{matricule}.pdf"},
     )
+
+
+@app.route("/kyc/pdf/<token>", methods=["GET"])
+def kyc_pdf_by_token(token):
+    """
+    Lien à jeton (le plus sûr) : GET /kyc/pdf/<token>. Le <token> n'est PAS
+    le matricule (voir kyc_token.py) — il est vérifié puis décodé pour
+    retrouver le matricule, ce qui empêche un utilisateur de modifier le lien
+    pour consulter la fiche d'un autre client, et il expire tout seul.
+    """
+    from kyc_token import verify_kyc_token
+
+    try:
+        matricule = verify_kyc_token(token)
+    except ValueError as e:
+        return _kyc_error_page(str(e), 403)
+
+    return _kyc_pdf_response_for_matricule(matricule)
+
+
+@app.route("/kyc/pdf-direct/<matricule>", methods=["GET"])
+def kyc_pdf_direct(matricule):
+    """
+    Lien à appeler côté appelant (ex: PL/SQL Oracle, simple concaténation de
+    chaîne) : GET /kyc/pdf-direct/<matricule>?key=<clé>. Ce n'est pas cette
+    URL que l'utilisateur final garde sous les yeux : une fois la clé
+    vérifiée, on l'autorise pour quelques secondes (cookie de session signé,
+    pas de matricule/clé dedans) puis on le redirige vers l'URL "propre"
+    /kyc-morale/<matricule>, qui sert réellement le PDF. C'est cette 2e URL,
+    sans clé visible, que le navigateur affiche.
+    """
+    from kyc_token import check_api_key
+
+    if not check_api_key(request.args.get("key")):
+        return _kyc_error_page("Clé invalide ou manquante (paramètre ?key=...).", 401)
+
+    matricule = (matricule or "").strip()
+    if not matricule:
+        return _kyc_error_page("Merci de préciser un matricule dans le lien.", 400)
+
+    session["kyc_pending"] = {"matricule": matricule, "exp": time.time() + 30}
+    return redirect(f"/kyc-morale/{matricule}")
+
+
+@app.route("/kyc-morale/<matricule>", methods=["GET"])
+def kyc_morale_clean_url(matricule):
+    """
+    URL "propre" affichée au navigateur (sans clé) : accessible uniquement
+    juste après un passage validé par /kyc/pdf-direct (autorisation à usage
+    unique, valable 30 secondes, portée par un cookie de session signé — pas
+    par le matricule/la clé). Visitée directement sans être passé par
+    /kyc/pdf-direct au préalable, elle refuse l'accès.
+    """
+    matricule = (matricule or "").strip()
+    pending = session.pop("kyc_pending", None)
+    if not pending or pending.get("matricule") != matricule or pending.get("exp", 0) < time.time():
+        return _kyc_error_page(
+            "Accès direct non autorisé. Merci d'ouvrir la fiche depuis l'application d'origine.",
+            403,
+        )
+    return _kyc_pdf_response_for_matricule(matricule)
 
 
 if __name__ == "__main__":

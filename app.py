@@ -175,6 +175,75 @@ def kyc_pdf():
     )
 
 
+def _kyc_error_page(message, status):
+    """Petite page HTML d'erreur (plutôt qu'un JSON brut) : cette route est
+    destinée à être ouverte comme un lien direct dans le navigateur."""
+    body = f"""<!DOCTYPE html>
+<html lang="fr"><head><meta charset="utf-8"><title>Fiche KYC</title></head>
+<body style="font-family:Arial, sans-serif;padding:48px;color:#333;">
+<h2 style="color:#b00020;margin-bottom:10px;">Impossible d'ouvrir la fiche KYC</h2>
+<p>{_e_html(message)}</p>
+</body></html>"""
+    return Response(body, status=status, mimetype="text/html")
+
+
+def _e_html(s):
+    import html as _html
+    return _html.escape(str(s))
+
+
+@app.route("/kyc/pdf/<matricule>", methods=["GET"])
+def kyc_pdf_by_matricule(matricule):
+    """
+    Lien direct : GET /kyc/pdf/<matricule> va chercher les données du client
+    dans Oracle ACE et ouvre directement le PDF de sa fiche KYC, sans passer
+    par l'écran de recherche/édition (utile pour être appelé depuis un autre
+    outil ACEP). Contrairement au parcours normal, les données ne sont donc
+    pas relues/éditées avant impression ici : elles sortent telles quelles de
+    la base.
+    """
+    from kyc_data import get_kyc_data, ClientIntrouvable, ClientPersonnePhysique
+
+    matricule = (matricule or "").strip()
+    if not matricule:
+        return _kyc_error_page("Merci de préciser un matricule client dans le lien.", 400)
+
+    try:
+        raw = get_kyc_data(matricule)
+    except ClientIntrouvable as e:
+        return _kyc_error_page(str(e), 404)
+    except ClientPersonnePhysique as e:
+        return _kyc_error_page(str(e), 400)
+    except RuntimeError as e:
+        return _kyc_error_page(str(e), 500)
+    except Exception as e:
+        return _kyc_error_page(f"Erreur de connexion à la base ACE : {e}", 500)
+
+    client_form = _map_client_to_form(raw["client"])
+    payload = {
+        "client": client_form,
+        "signataires": [_map_signataire(r) for r in raw["signataires"]],
+        "dirigeants": [_map_signataire(r) for r in raw["dirigeants"]],
+        "actionnaires": [_map_actionnaire(r) for r in raw["actionnaires"]],
+        "infos_fin": [_map_infos_fin(r) for r in raw["infos_fin"]],
+        "pour_compte_de": client_form.get("raison_sociale", ""),
+        "fait_a": "",
+        "le": "",
+        "date_jour": datetime.date.today().strftime("%d/%m/%Y"),
+    }
+
+    try:
+        pdf_bytes = generate_kyc_pdf(payload)
+    except Exception as e:
+        return _kyc_error_page(f"Erreur de génération du PDF : {e}", 500)
+
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=fiche_kyc_{matricule}.pdf"},
+    )
+
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 4444))
     # debug=False : ce process ne doit pas être utilisé tel quel en production,

@@ -161,13 +161,17 @@ def _dynamic_table(title, cols, rows):
     )
 
 
-def render_kyc_html(data):
+def render_kyc_html(data, include_date_line=True):
     """
     data = {
         'date_jour': str, 'client': {...}, 'signataires': [...],
         'dirigeants': [...], 'actionnaires': [...], 'infos_fin': [...],
         'pour_compte_de': str, 'fait_a': str, 'le': str,
     }
+
+    include_date_line=False permet d'omettre la ligne "Date : ..." en tête de
+    document : utilisé par le rendu PDF, où la date est affichée dans l'en-tête
+    de page (uniquement sur la 1re page) plutôt que dans le corps du texte.
     """
     client = _prepare_client_display(data.get("client", {}))
     date_jour = _e(data.get("date_jour", ""))
@@ -176,10 +180,11 @@ def render_kyc_html(data):
     le = _e(data.get("le", ""))
 
     parts = []
-    parts.append(
-        f'<p style="text-align:right;margin:0;font-size:9pt;'
-        f'font-family:Arial, sans-serif;">Date : {date_jour or "____ / ____ / ________"}</p>'
-    )
+    if include_date_line:
+        parts.append(
+            f'<p style="text-align:right;margin:0;font-size:9pt;'
+            f'font-family:Arial, sans-serif;">Date : {date_jour or "____ / ____ / ________"}</p>'
+        )
     parts.append(
         '<p style="text-align:center;margin:26px 0 0;font-size:16pt;font-weight:bold;'
         'font-family:Arial, sans-serif;">FICHE KYC PERSONNE MORALE</p>'
@@ -216,18 +221,19 @@ def render_kyc_html(data):
     parts.append(f'<p {decl_style}>{DECLARATION_2}</p>')
     parts.append(f'<p {decl_style}>{DECLARATION_3}</p>')
 
+    # Bloc signature : une seule ligne "Signature du gérant :  …  Signature ACEP"
+    # (comme dans le document Word source, qui n'utilise pas de tableau ici),
+    # suivie de la mention en petit, sur toute la largeur.
     parts.append(
-        '<table style="width:100%;margin-top:30px;font-size:10.5pt;font-family:Arial, sans-serif;">'
-        '<tr>'
-        '<td style="width:50%;vertical-align:top;">'
-        '<p style="margin:0;font-weight:bold;">Signature du gérant :</p>'
-        '<p style="margin:6px 0 0;font-size:9pt;font-style:italic;">'
+        '<div style="display:flex;justify-content:space-between;align-items:baseline;'
+        'margin-top:34px;font-size:10.5pt;font-family:Arial, sans-serif;">'
+        '<span>Signature du gérant :</span>'
+        '<span>Signature ACEP :</span>'
+        '</div>'
+    )
+    parts.append(
+        '<p style="margin:6px 0 0;font-size:9pt;color:#555;font-family:Arial, sans-serif;">'
         "(Précédée de la mention « je déclare sur honneur »)</p>"
-        '</td>'
-        '<td style="width:50%;vertical-align:top;">'
-        '<p style="margin:0;font-weight:bold;">Signature ACEP :</p>'
-        "</td>"
-        "</tr></table>"
     )
 
     return "".join(parts)
@@ -256,10 +262,13 @@ def render_kyc_pdf_html(data):
     numérotation ("Page X / Y", via les compteurs CSS natifs) — deux choses
     que le moteur d'impression natif du navigateur ne sait pas faire.
     """
-    body = render_kyc_html(data)
+    # include_date_line=False : la date n'est plus dans le corps du texte,
+    # elle est affichée dans l'en-tête de page (uniquement page 1, voir @page :first).
+    body = render_kyc_html(data, include_date_line=False)
+    date_jour = _e(data.get("date_jour", "")) or "____ / ____ / ________"
     logo_uri = _logo_data_uri()
     logo_img = (
-        f'<img src="{logo_uri}" style="height:24px;vertical-align:middle;margin-right:9px;">'
+        f'<img src="{logo_uri}" style="height:22px;vertical-align:middle;margin-right:8px;">'
         if logo_uri else ""
     )
 
@@ -271,8 +280,8 @@ def render_kyc_pdf_html(data):
 <style>
   @page {{
     size: A4;
-    margin: 2.3cm 1.9cm 1.7cm 1.9cm;
-    @top-center {{ content: element(pageHeader); }}
+    margin: 2.2cm 1.9cm 1.7cm 1.9cm;
+    @top-left {{ content: element(pageHeader); vertical-align: middle; }}
     @bottom-center {{
       content: "Page " counter(page) " / " counter(pages);
       font-family: Arial, sans-serif;
@@ -280,14 +289,14 @@ def render_kyc_pdf_html(data):
       color: #666666;
     }}
   }}
+  @page :first {{
+    @top-right {{ content: element(pageDate); vertical-align: middle; }}
+  }}
   #page-header {{
     position: running(pageHeader);
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 100%;
-    border-bottom: 1.5px solid {GREEN};
-    padding-bottom: 7px;
+    justify-content: flex-start;
     font-family: Arial, sans-serif;
   }}
   #page-header .name {{
@@ -295,6 +304,12 @@ def render_kyc_pdf_html(data):
     font-weight: bold;
     color: {GREEN};
     letter-spacing: 0.6px;
+  }}
+  #page-date {{
+    position: running(pageDate);
+    font-family: Arial, sans-serif;
+    font-size: 9pt;
+    color: #666666;
   }}
   * {{ box-sizing: border-box; }}
   body {{
@@ -307,6 +322,7 @@ def render_kyc_pdf_html(data):
 </head>
 <body>
   <div id="page-header">{logo_img}<span class="name">ACEP</span></div>
+  <div id="page-date">Date : {date_jour}</div>
   {body}
 </body>
 </html>"""

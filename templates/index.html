@@ -729,8 +729,8 @@ kycSearchBtn.addEventListener('click', async () => {
         actionnaires: payload.actionnaires,
         infos_fin: payload.infos_fin,
         pour_compte_de: payload.client.raison_sociale || '',
-        fait_a: 'Dakar',
-        le: new Date().toLocaleDateString('fr-FR'),
+        fait_a: '',
+        le: '',
       };
       const pdfRes = await fetch('/kyc/pdf', {
         method: 'POST',

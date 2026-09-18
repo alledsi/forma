@@ -126,9 +126,44 @@
   .btn-secondary:hover { background: var(--primary-light); }
 
   .actions { display: flex; gap: 10px; margin-top: 24px; }
-  #status { margin-top: 14px; font-size: 13px; }
-  #status.error { color: #b3261e; }
-  #status.success { color: var(--primary); }
+  #status, #kycStatus { margin-top: 14px; font-size: 13px; }
+  #status.error, #kycStatus.error { color: #b3261e; }
+  #status.success, #kycStatus.success { color: var(--primary); }
+
+  /* KYC — recherche + formulaire éditable */
+  .search-card {
+    background: white; border: 1px solid var(--border); border-radius: 10px;
+    padding: 28px 32px; max-width: 480px;
+  }
+  .kyc-section { margin-top: 30px; }
+  .kyc-section h3 { font-size: 15px; margin: 0 0 12px; }
+  .kyc-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 4px 20px;
+    background: white; border: 1px solid var(--border); border-radius: 10px; padding: 20px 24px;
+  }
+  .kyc-grid label { margin: 10px 0 4px; }
+  .dyn-table-wrap {
+    background: white; border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px; overflow-x: auto;
+  }
+  table.dyn-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.dyn-table th {
+    text-align: left; font-size: 12px; color: var(--muted); padding: 6px 8px;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  table.dyn-table td { padding: 4px 6px; }
+  table.dyn-table input {
+    padding: 6px 8px; font-size: 13px; min-width: 90px;
+  }
+  .row-remove {
+    background: none; border: none; color: #b3261e; cursor: pointer;
+    font-size: 16px; padding: 2px 8px;
+  }
+  .row-add {
+    margin-top: 10px; background: white; color: var(--primary);
+    border: 1px dashed var(--primary); padding: 7px 14px; font-size: 13px;
+  }
+  .row-add:hover { background: var(--primary-light); }
 
   /* APERÇU */
   #previewArea {
@@ -190,7 +225,74 @@
         <p>{{ cfg.description }}</p>
       </div>
       {% endfor %}
+      <div class="doc-card" id="kycCard">
+        <div class="icon">🏢</div>
+        <h3>Fiche KYC (personne morale)</h3>
+        <p>Recherche par matricule client, pré-remplissage depuis ACE, édition avant impression.</p>
+      </div>
     </div>
+  </section>
+
+  <!-- KYC : RECHERCHE -->
+  <section id="screen-kyc-search" class="hidden">
+    <button class="back-link" id="kycSearchBack">← Retour au menu</button>
+    <h2 class="screen-title">Fiche KYC — Recherche client</h2>
+    <p class="screen-sub">Saisissez le matricule d'un client personne morale.</p>
+    <div class="search-card">
+      <label for="kycMatricule">Matricule client</label>
+      <input type="text" id="kycMatricule" placeholder="ex: 00012345">
+      <div class="actions">
+        <button id="kycSearchBtn">Rechercher</button>
+      </div>
+      <div id="kycSearchStatus"></div>
+    </div>
+  </section>
+
+  <!-- KYC : FORMULAIRE ÉDITABLE -->
+  <section id="screen-kyc-form" class="hidden">
+    <button class="back-link" id="kycFormBack">← Nouvelle recherche</button>
+    <h2 class="screen-title">Fiche KYC personne morale</h2>
+    <p class="screen-sub">Vérifiez et complétez les informations avant impression.</p>
+
+    <div class="kyc-section">
+      <h3>1. Identification client</h3>
+      <div class="kyc-grid" id="kycBloc1"></div>
+    </div>
+
+    <div class="kyc-section">
+      <h3>2. Gouvernance / Structure — Signataires</h3>
+      <div class="dyn-table-wrap"><div id="kycSignataires"></div></div>
+    </div>
+    <div class="kyc-section">
+      <h3>Dirigeants</h3>
+      <div class="dyn-table-wrap"><div id="kycDirigeants"></div></div>
+    </div>
+    <div class="kyc-section">
+      <h3>Bénéficiaires effectifs</h3>
+      <div class="dyn-table-wrap"><div id="kycActionnaires"></div></div>
+    </div>
+
+    <div class="kyc-section">
+      <h3>3. Infos financières</h3>
+      <div class="dyn-table-wrap"><div id="kycInfosFin"></div></div>
+    </div>
+
+    <div class="kyc-section">
+      <h3>4. Déclaration</h3>
+      <div class="kyc-grid" style="grid-template-columns:1fr;">
+        <label for="kycPourCompteDe">Agit pour le compte de</label>
+        <input type="text" id="kycPourCompteDe">
+      </div>
+      <div class="kyc-grid">
+        <div><label for="kycFaitA">Fait à</label><input type="text" id="kycFaitA" value="Dakar"></div>
+        <div><label for="kycLe">Le</label><input type="text" id="kycLe"></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="kycPreviewBtn">Prévisualiser la fiche</button>
+    </div>
+    <div id="kycStatus"></div>
   </section>
 
   <!-- FORMULAIRE -->
@@ -229,6 +331,8 @@ const screens = {
   menu: document.getElementById('screen-menu'),
   form: document.getElementById('screen-form'),
   result: document.getElementById('screen-result'),
+  kycSearch: document.getElementById('screen-kyc-search'),
+  kycForm: document.getElementById('screen-kyc-form'),
 };
 function showScreen(name) {
   Object.values(screens).forEach(s => s.classList.add('hidden'));
@@ -272,8 +376,14 @@ function renderForm(key) {
   });
 }
 
+// resultContext indique quel écran gère le bouton "Retour" / "Nouveau document"
+// de l'écran d'aperçu partagé entre attestations et fiche KYC.
+let resultContext = 'attestation';
+
 document.getElementById('form-back').addEventListener('click', () => showScreen('menu'));
-document.getElementById('result-back').addEventListener('click', () => showScreen('form'));
+document.getElementById('result-back').addEventListener('click', () => {
+  showScreen(resultContext === 'kyc' ? 'kycForm' : 'form');
+});
 document.getElementById('newDocBtn').addEventListener('click', () => {
   currentType = null;
   previewArea.innerHTML = '';
@@ -307,6 +417,7 @@ generateBtn.addEventListener('click', async () => {
 
     // Affichage en lecture seule : aucun lien de téléchargement n'est créé.
     previewArea.innerHTML = payload.html;
+    resultContext = 'attestation';
     showScreen('result');
   } catch (e) {
     status.textContent = 'Erreur : ' + e.message;
@@ -319,6 +430,218 @@ generateBtn.addEventListener('click', async () => {
 
 printBtn.addEventListener('click', () => {
   window.print();
+});
+
+/* ===================== FICHE KYC ===================== */
+
+const BLOC1_FIELDS = [
+  ['matricule_client', 'Matricule client'], ['code_bureau', 'Code bureau'],
+  ['raison_sociale', 'Raison sociale client'], ['statut_client', 'Statut client'],
+  ['sigle', 'Sigle'], ['date_creation', 'Date création client'],
+  ['forme_juridique', 'Forme juridique'], ['agrement', 'Agrément'],
+  ['no_agrement', "N° Agrément/Arrêté n°/Décret n°"], ['delivre_par', 'Délivré par'],
+  ['no_registre_commerce', 'N° registre commerce'], ['date_deliv_registre', 'Date déliv. registre'],
+  ['ninea', 'NINEA'], ['date_deliv_ninea', 'Date déliv. NINEA'],
+  ['code_sous_secteur', 'Code sous-secteur'], ['secteur', 'Secteur'],
+  ['telephone', 'Téléphone'], ['email', 'Email'],
+  ['adresse', 'Adresse'], ['adresse_postale', 'Adresse postale'],
+  ['pays', 'Pays'], ['cotation', 'Cotation'],
+  ['nature', 'Nature'], ['categorie', 'Catégorie'],
+  ['gestionnaire', 'Gestionnaire'], ['sms_connect', 'Sms Connect'],
+  ['consentement', 'Consentement ?'], ['numero_consentement', 'Numéro Consentement'],
+];
+const GOUVERNANCE_COLS = [
+  ['prenom', 'Prénom'], ['nom', 'Nom'], ['fonction', 'Fonction'],
+  ['piece_identite', "N° pièce d'identité"], ['nationalite', 'Nationalité'],
+];
+const BENEFICIAIRE_COLS = [
+  ['prenom', 'Prénom'], ['nom', 'Nom'], ['piece_identite', "N° pièce d'identité"],
+  ['part', 'Part (%)'], ['nationalite', 'Nationalité'],
+];
+const FINANCE_COLS = [
+  ['annee', 'Année'], ['chiffre_affaires', "Chiffre d'affaires"],
+  ['resultat_net', 'Résultat Net'], ['capital', 'Capital'], ['effectif', 'Effectif'],
+];
+
+const kycMatricule = document.getElementById('kycMatricule');
+const kycSearchBtn = document.getElementById('kycSearchBtn');
+const kycSearchStatus = document.getElementById('kycSearchStatus');
+const kycBloc1 = document.getElementById('kycBloc1');
+const kycStatus = document.getElementById('kycStatus');
+
+document.getElementById('kycCard').addEventListener('click', () => {
+  kycSearchStatus.textContent = '';
+  kycSearchStatus.className = '';
+  kycMatricule.value = '';
+  showScreen('kycSearch');
+});
+document.getElementById('kycSearchBack').addEventListener('click', () => showScreen('menu'));
+document.getElementById('kycFormBack').addEventListener('click', () => showScreen('kycSearch'));
+
+function renderBloc1(values) {
+  kycBloc1.innerHTML = '';
+  BLOC1_FIELDS.forEach(([key, label]) => {
+    const wrap = document.createElement('div');
+    const lab = document.createElement('label');
+    lab.textContent = label;
+    lab.setAttribute('for', 'kyc_' + key);
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'kyc_' + key;
+    input.dataset.key = key;
+    input.value = (values && values[key]) || '';
+    wrap.appendChild(lab);
+    wrap.appendChild(input);
+    kycBloc1.appendChild(wrap);
+  });
+}
+
+function renderDynTable(containerId, cols, rows) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  const table = document.createElement('table');
+  table.className = 'dyn-table';
+  const thead = document.createElement('tr');
+  cols.forEach(([, label]) => {
+    const th = document.createElement('th');
+    th.textContent = label;
+    thead.appendChild(th);
+  });
+  thead.appendChild(document.createElement('th'));
+  table.appendChild(thead);
+
+  function addRow(rowData) {
+    const tr = document.createElement('tr');
+    cols.forEach(([key]) => {
+      const td = document.createElement('td');
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.dataset.key = key;
+      input.value = (rowData && rowData[key]) || '';
+      td.appendChild(input);
+      tr.appendChild(td);
+    });
+    const tdBtn = document.createElement('td');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'row-remove';
+    btn.textContent = '✕';
+    btn.addEventListener('click', () => tr.remove());
+    tdBtn.appendChild(btn);
+    tr.appendChild(tdBtn);
+    table.appendChild(tr);
+  }
+
+  (rows && rows.length ? rows : [{}]).forEach(addRow);
+  container.appendChild(table);
+
+  const addBtn = document.createElement('button');
+  addBtn.type = 'button';
+  addBtn.className = 'row-add';
+  addBtn.textContent = '+ Ajouter une ligne';
+  addBtn.addEventListener('click', () => addRow({}));
+  container.appendChild(addBtn);
+}
+
+function collectDynTable(containerId, cols) {
+  const rows = [];
+  document.querySelectorAll('#' + containerId + ' table.dyn-table tr').forEach((tr, idx) => {
+    if (idx === 0) return; // en-tête
+    const row = {};
+    let hasValue = false;
+    cols.forEach(([key], colIdx) => {
+      const input = tr.children[colIdx].querySelector('input');
+      const val = input ? input.value.trim() : '';
+      if (val) hasValue = true;
+      row[key] = val;
+    });
+    if (hasValue) rows.push(row);
+  });
+  return rows;
+}
+
+kycSearchBtn.addEventListener('click', async () => {
+  const matricule = kycMatricule.value.trim();
+  if (!matricule) {
+    kycSearchStatus.textContent = 'Merci de saisir un matricule.';
+    kycSearchStatus.className = 'error';
+    return;
+  }
+  kycSearchBtn.disabled = true;
+  kycSearchBtn.textContent = 'Recherche...';
+  kycSearchStatus.textContent = '';
+  kycSearchStatus.className = '';
+
+  try {
+    const res = await fetch('/kyc/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matricule })
+    });
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.error || 'Erreur inconnue');
+
+    renderBloc1(payload.client);
+    renderDynTable('kycSignataires', GOUVERNANCE_COLS, payload.signataires);
+    renderDynTable('kycDirigeants', GOUVERNANCE_COLS, payload.dirigeants);
+    renderDynTable('kycActionnaires', BENEFICIAIRE_COLS, payload.actionnaires);
+    renderDynTable('kycInfosFin', FINANCE_COLS, payload.infos_fin);
+    document.getElementById('kycPourCompteDe').value = payload.client.raison_sociale || '';
+    document.getElementById('kycLe').value = new Date().toLocaleDateString('fr-FR');
+    kycStatus.textContent = '';
+    kycStatus.className = '';
+    showScreen('kycForm');
+  } catch (e) {
+    kycSearchStatus.textContent = 'Erreur : ' + e.message;
+    kycSearchStatus.className = 'error';
+  } finally {
+    kycSearchBtn.disabled = false;
+    kycSearchBtn.textContent = 'Rechercher';
+  }
+});
+
+document.getElementById('kycPreviewBtn').addEventListener('click', async () => {
+  const client = {};
+  BLOC1_FIELDS.forEach(([key]) => {
+    client[key] = document.getElementById('kyc_' + key).value;
+  });
+
+  const data = {
+    client,
+    signataires: collectDynTable('kycSignataires', GOUVERNANCE_COLS),
+    dirigeants: collectDynTable('kycDirigeants', GOUVERNANCE_COLS),
+    actionnaires: collectDynTable('kycActionnaires', BENEFICIAIRE_COLS),
+    infos_fin: collectDynTable('kycInfosFin', FINANCE_COLS),
+    pour_compte_de: document.getElementById('kycPourCompteDe').value,
+    fait_a: document.getElementById('kycFaitA').value,
+    le: document.getElementById('kycLe').value,
+  };
+
+  const btn = document.getElementById('kycPreviewBtn');
+  btn.disabled = true;
+  btn.textContent = 'Génération...';
+  kycStatus.textContent = '';
+  kycStatus.className = '';
+
+  try {
+    const res = await fetch('/kyc/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.error || 'Erreur inconnue');
+
+    previewArea.innerHTML = payload.html;
+    resultContext = 'kyc';
+    showScreen('result');
+  } catch (e) {
+    kycStatus.textContent = 'Erreur : ' + e.message;
+    kycStatus.className = 'error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Prévisualiser la fiche';
+  }
 });
 </script>
 </body>

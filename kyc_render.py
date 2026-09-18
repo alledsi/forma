@@ -7,11 +7,43 @@ Contrairement aux attestations (template Word figé), cette fiche a des blocs
 infos financières) : le rendu est donc construit dynamiquement en Python,
 pas en remplissant un .docx existant.
 """
+import base64
 import html
+import os
 
 GREEN = "#02564A"
 BORDER = "#D9D9D9"
 OUTER_BORDER = "#1F3864"
+
+STATUT_CLIENT_LABELS = {
+    "A": "Adhérent",
+    "N": "Nouveau",
+    "P": "Personnel",
+    "I": "Autre",
+    "C": "Attente Conformité",
+    "K": "Acep fekkissila",
+}
+
+OUI_NON_LABELS = {"O": "Oui", "N": "Non"}
+
+
+def _label_statut_client(v):
+    v = (v or "").strip().upper()
+    return STATUT_CLIENT_LABELS.get(v, v)
+
+
+def _label_oui_non(v):
+    v = (v or "").strip().upper()
+    return OUI_NON_LABELS.get(v, v)
+
+
+def _prepare_client_display(client):
+    """Copie du client avec les codes traduits en libellés lisibles pour l'affichage."""
+    c = dict(client or {})
+    c["statut_client"] = _label_statut_client(c.get("statut_client"))
+    c["sms_connect"] = _label_oui_non(c.get("sms_connect"))
+    c["consentement"] = _label_oui_non(c.get("consentement"))
+    return c
 
 # (clé_champ, libellé) pour le Bloc 1, dans l'ordre d'affichage par paires
 # gauche/droite, identique à la disposition du document Word source.
@@ -23,7 +55,7 @@ BLOC1_PAIRS = [
     ("no_agrement", "N° Agrément/Arrêté n°/Décret n°", "delivre_par", "Délivré par"),
     ("no_registre_commerce", "N° registre commerce", "date_deliv_registre", "Date déliv. registre"),
     ("ninea", "NINEA", "date_deliv_ninea", "Date déliv. NINEA"),
-    ("code_sous_secteur", "Code sous-secteur", "secteur", "Secteur"),
+    ("sous_secteur", "Sous-Secteur", "secteur", "Secteur"),
     ("telephone", "Téléphone", "email", "Email"),
     ("adresse", "Adresse", "adresse_postale", "Adresse postale"),
     ("pays", "Pays", "cotation", "Cotation"),
@@ -74,10 +106,12 @@ def _bloc1_table(client):
     for key_l, label_l, key_r, label_r in BLOC1_PAIRS:
         rows.append(
             "<tr>"
-            f'<td style="border:1px solid {BORDER};padding:6px 10px;font-weight:bold;width:22%;">{_e(label_l)}</td>'
-            f'<td style="border:1px solid {BORDER};padding:6px 10px;width:28%;">{_cell(client.get(key_l))}</td>'
-            f'<td style="border:1px solid {BORDER};padding:6px 10px;font-weight:bold;width:22%;">{_e(label_r)}</td>'
-            f'<td style="border:1px solid {BORDER};padding:6px 10px;width:28%;">{_cell(client.get(key_r))}</td>'
+            f'<td style="border:1px solid {BORDER};padding:7px 12px;font-weight:bold;'
+            f'width:22%;background:#F2F6F4;">{_e(label_l)}</td>'
+            f'<td style="border:1px solid {BORDER};padding:7px 12px;width:28%;">{_cell(client.get(key_l))}</td>'
+            f'<td style="border:1px solid {BORDER};padding:7px 12px;font-weight:bold;'
+            f'width:22%;background:#F2F6F4;">{_e(label_r)}</td>'
+            f'<td style="border:1px solid {BORDER};padding:7px 12px;width:28%;">{_cell(client.get(key_r))}</td>'
             "</tr>"
         )
     inner = (
@@ -89,22 +123,23 @@ def _bloc1_table(client):
 
 def _dynamic_table(title, cols, rows):
     header_cells = "".join(
-        f'<th style="border:1px solid {BORDER};padding:6px 10px;text-align:left;'
-        f'color:white;">{_e(label)}</th>'
+        f'<th style="border:1px solid {BORDER};padding:8px 12px;text-align:left;'
+        f'color:white;font-size:9.5pt;text-transform:uppercase;letter-spacing:0.4px;">{_e(label)}</th>'
         for _, label in cols
     )
     body_rows = []
     if rows:
-        for row in rows:
+        for i, row in enumerate(rows):
+            bg = "#ffffff" if i % 2 == 0 else "#F7FAF9"
             cells = "".join(
-                f'<td style="border:1px solid {BORDER};padding:6px 10px;">{_cell(row.get(key))}</td>'
+                f'<td style="border:1px solid {BORDER};padding:7px 12px;background:{bg};">{_cell(row.get(key))}</td>'
                 for key, _ in cols
             )
             body_rows.append(f"<tr>{cells}</tr>")
     else:
         colspan = len(cols)
         body_rows.append(
-            f'<tr><td colspan="{colspan}" style="border:1px solid {BORDER};padding:8px 10px;'
+            f'<tr><td colspan="{colspan}" style="border:1px solid {BORDER};padding:9px 12px;'
             f'color:#888;font-style:italic;">Aucune donnée</td></tr>'
         )
 
@@ -114,9 +149,15 @@ def _dynamic_table(title, cols, rows):
         f'<tr style="background:{GREEN};">{header_cells}</tr>'
         + "".join(body_rows) + "</table>"
     )
+    title_html = (
+        f'<h3 style="font-size:11.5pt;margin:14px 0 6px;font-family:Arial, sans-serif;'
+        f'color:{GREEN};">{_e(title)}</h3>'
+        if title else ""
+    )
     return (
-        f'<h3 style="font-size:12pt;margin:14px 0 6px;font-family:Arial, sans-serif;">{_e(title)}</h3>'
-        f'<div style="border:1.5px solid {OUTER_BORDER};margin:0 0 18px;overflow:hidden;">{inner}</div>'
+        title_html
+        + f'<div style="border:1.5px solid {OUTER_BORDER};margin:0 0 18px;overflow:hidden;'
+        f'border-radius:3px;">{inner}</div>'
     )
 
 
@@ -128,7 +169,7 @@ def render_kyc_html(data):
         'pour_compte_de': str, 'fait_a': str, 'le': str,
     }
     """
-    client = data.get("client", {})
+    client = _prepare_client_display(data.get("client", {}))
     date_jour = _e(data.get("date_jour", ""))
     pour_compte_de = _e(data.get("pour_compte_de", "……………………………………………………"))
     fait_a = _e(data.get("fait_a", ""))
@@ -190,3 +231,91 @@ def render_kyc_html(data):
     )
 
     return "".join(parts)
+
+
+def _logo_data_uri():
+    """Encode le logo ACEP en base64 pour l'en-tête répété du PDF (évite toute
+    dépendance à un chemin de fichier accessible depuis le moteur PDF)."""
+    path = os.path.join(os.path.dirname(__file__), "static", "logo_acep.png")
+    try:
+        with open(path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("ascii")
+        return f"data:image/png;base64,{b64}"
+    except OSError:
+        return ""
+
+
+def render_kyc_pdf_html(data):
+    """
+    Document HTML complet (avec <html>/<head>/<body> et règles @page CSS)
+    utilisé pour générer le PDF de la fiche KYC via WeasyPrint.
+
+    Contrairement à render_kyc_html() (qui ne produit qu'un fragment pour
+    l'aperçu écran), ce document définit un en-tête répété sur chaque page
+    (logo + "ACEP", via un élément "running") et un pied de page avec
+    numérotation ("Page X / Y", via les compteurs CSS natifs) — deux choses
+    que le moteur d'impression natif du navigateur ne sait pas faire.
+    """
+    body = render_kyc_html(data)
+    logo_uri = _logo_data_uri()
+    logo_img = (
+        f'<img src="{logo_uri}" style="height:24px;vertical-align:middle;margin-right:9px;">'
+        if logo_uri else ""
+    )
+
+    return f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Fiche KYC</title>
+<style>
+  @page {{
+    size: A4;
+    margin: 2.3cm 1.9cm 1.7cm 1.9cm;
+    @top-center {{ content: element(pageHeader); }}
+    @bottom-center {{
+      content: "Page " counter(page) " / " counter(pages);
+      font-family: Arial, sans-serif;
+      font-size: 8.5pt;
+      color: #666666;
+    }}
+  }}
+  #page-header {{
+    position: running(pageHeader);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    border-bottom: 1.5px solid {GREEN};
+    padding-bottom: 7px;
+    font-family: Arial, sans-serif;
+  }}
+  #page-header .name {{
+    font-size: 13pt;
+    font-weight: bold;
+    color: {GREEN};
+    letter-spacing: 0.6px;
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{
+    font-family: Arial, sans-serif;
+    color: #1a1a1a;
+    margin: 0;
+  }}
+  table {{ border-collapse: collapse; }}
+</style>
+</head>
+<body>
+  <div id="page-header">{logo_img}<span class="name">ACEP</span></div>
+  {body}
+</body>
+</html>"""
+
+
+def generate_kyc_pdf(data):
+    """Retourne les octets du PDF de la fiche KYC, avec en-tête (logo + ACEP)
+    et numérotation de pages répétés automatiquement par WeasyPrint."""
+    from weasyprint import HTML
+
+    html_doc = render_kyc_pdf_html(data)
+    return HTML(string=html_doc, base_url=os.path.dirname(__file__)).write_pdf()

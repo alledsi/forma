@@ -7,9 +7,9 @@ Production :  gunicorn -w 3 -b 0.0.0.0:4444 app:app
 import datetime
 import os
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, Response
 from doc_engine import DOC_TYPES, generate_preview_html
-from kyc_render import render_kyc_html
+from kyc_render import render_kyc_html, generate_kyc_pdf
 
 app = Flask(__name__)
 
@@ -24,7 +24,7 @@ def _map_client_to_form(client):
         "statut_client": client.get("STATUT_CLIENT", ""),
         "sigle": client.get("SIGLE_CLIENT", ""),
         "date_creation": client.get("DATE_CRE", ""),
-        "forme_juridique": client.get("CODE_FORME", ""),
+        "forme_juridique": client.get("LIBELLE_FORME", ""),
         "agrement": "",
         "no_agrement": client.get("NO_AGREMENT", ""),
         "delivre_par": client.get("DELIVRE_PAR", ""),
@@ -32,7 +32,7 @@ def _map_client_to_form(client):
         "date_deliv_registre": client.get("DATE_DELIV_RC", ""),
         "ninea": client.get("NINEA", ""),
         "date_deliv_ninea": client.get("DATE_DELIV_NINEA", ""),
-        "code_sous_secteur": client.get("CODE_SSECT", ""),
+        "sous_secteur": client.get("LIB_SSECT", ""),
         "secteur": secteur,
         "telephone": client.get("TEL_ENTREPRISE_FIXE", ""),
         "email": client.get("EMAIL", ""),
@@ -150,6 +150,29 @@ def kyc_preview():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     return jsonify({"html": html_out})
+
+
+@app.route("/kyc/pdf", methods=["POST"])
+def kyc_pdf():
+    """
+    Génère la fiche KYC en PDF (via WeasyPrint) avec en-tête logo+ACEP et
+    numérotation de pages répétés sur chaque page — impossible à obtenir avec
+    l'impression navigateur classique utilisée pour les attestations.
+    Le PDF est renvoyé inline (pas d'en-tête Content-Disposition: attachment)
+    pour rester dans le même esprit "aperçu + impression" que le reste de FORMA.
+    """
+    payload = request.get_json(force=True)
+    payload.setdefault("date_jour", datetime.date.today().strftime("%d/%m/%Y"))
+    try:
+        pdf_bytes = generate_kyc_pdf(payload)
+    except Exception as e:
+        return jsonify({"error": f"Erreur de génération du PDF : {e}"}), 500
+
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": "inline; filename=fiche_kyc.pdf"},
+    )
 
 
 if __name__ == "__main__":

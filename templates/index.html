@@ -379,6 +379,9 @@ function renderForm(key) {
 // resultContext indique quel écran gère le bouton "Retour" / "Nouveau document"
 // de l'écran d'aperçu partagé entre attestations et fiche KYC.
 let resultContext = 'attestation';
+// Dernier payload KYC prévisualisé, réutilisé pour générer le PDF à l'impression
+// (en-tête logo+ACEP et numérotation de pages, impossibles avec window.print()).
+let lastKycPayload = null;
 
 document.getElementById('form-back').addEventListener('click', () => showScreen('menu'));
 document.getElementById('result-back').addEventListener('click', () => {
@@ -428,7 +431,36 @@ generateBtn.addEventListener('click', async () => {
   }
 });
 
-printBtn.addEventListener('click', () => {
+printBtn.addEventListener('click', async () => {
+  // Fiche KYC : on passe par un PDF généré côté serveur (WeasyPrint) pour avoir
+  // un en-tête logo+ACEP et une numérotation de pages répétés sur chaque page,
+  // ce que le moteur d'impression natif du navigateur ne sait pas faire.
+  if (resultContext === 'kyc' && lastKycPayload) {
+    const originalText = printBtn.textContent;
+    printBtn.disabled = true;
+    printBtn.textContent = 'Préparation...';
+    try {
+      const res = await fetch('/kyc/pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(lastKycPayload)
+      });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => ({}));
+        throw new Error(payload.error || 'Erreur de génération du PDF');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (e) {
+      kycStatus.textContent = 'Erreur : ' + e.message;
+      kycStatus.className = 'error';
+    } finally {
+      printBtn.disabled = false;
+      printBtn.textContent = originalText;
+    }
+    return;
+  }
   window.print();
 });
 
@@ -442,7 +474,7 @@ const BLOC1_FIELDS = [
   ['no_agrement', "N° Agrément/Arrêté n°/Décret n°"], ['delivre_par', 'Délivré par'],
   ['no_registre_commerce', 'N° registre commerce'], ['date_deliv_registre', 'Date déliv. registre'],
   ['ninea', 'NINEA'], ['date_deliv_ninea', 'Date déliv. NINEA'],
-  ['code_sous_secteur', 'Code sous-secteur'], ['secteur', 'Secteur'],
+  ['sous_secteur', 'Sous-Secteur'], ['secteur', 'Secteur'],
   ['telephone', 'Téléphone'], ['email', 'Email'],
   ['adresse', 'Adresse'], ['adresse_postale', 'Adresse postale'],
   ['pays', 'Pays'], ['cotation', 'Cotation'],
@@ -634,6 +666,7 @@ document.getElementById('kycPreviewBtn').addEventListener('click', async () => {
 
     previewArea.innerHTML = payload.html;
     resultContext = 'kyc';
+    lastKycPayload = data;
     showScreen('result');
   } catch (e) {
     kycStatus.textContent = 'Erreur : ' + e.message;

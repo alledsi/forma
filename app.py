@@ -192,21 +192,51 @@ def _e_html(s):
     return _html.escape(str(s))
 
 
-@app.route("/kyc/pdf/<matricule>", methods=["GET"])
-def kyc_pdf_by_matricule(matricule):
+@app.route("/kyc/token", methods=["POST"])
+def kyc_mint_token():
     """
-    Lien direct : GET /kyc/pdf/<matricule> va chercher les données du client
-    dans Oracle ACE et ouvre directement le PDF de sa fiche KYC, sans passer
-    par l'écran de recherche/édition (utile pour être appelé depuis un autre
-    outil ACEP). Contrairement au parcours normal, les données ne sont donc
-    pas relues/éditées avant impression ici : elles sortent telles quelles de
-    la base.
+    Endpoint serveur-à-serveur (jamais appelé depuis le navigateur de
+    l'utilisateur final) : le backend de l'appli appelante demande ici un
+    jeton signé et à courte durée de vie pour un matricule donné, protégé par
+    une clé API partagée (en-tête X-API-Key). L'appli appelante affiche
+    ensuite à son utilisateur le lien /kyc/pdf/<token> renvoyé — jamais le
+    matricule en clair.
+    """
+    from kyc_token import mint_kyc_token, check_api_key
+
+    if not check_api_key(request.headers.get("X-API-Key")):
+        return jsonify({"error": "Clé API invalide ou manquante (en-tête X-API-Key)."}), 401
+
+    payload = request.get_json(force=True) or {}
+    matricule = (payload.get("matricule") or "").strip()
+    if not matricule:
+        return jsonify({"error": "Merci de préciser un matricule."}), 400
+
+    ttl_seconds = payload.get("ttl_seconds", 300)
+    token = mint_kyc_token(matricule, ttl_seconds=ttl_seconds)
+    return jsonify({"token": token, "path": f"/kyc/pdf/{token}", "expires_in": ttl_seconds})
+
+
+@app.route("/kyc/pdf/<token>", methods=["GET"])
+def kyc_pdf_by_token(token):
+    """
+    Lien direct destiné à l'utilisateur final : GET /kyc/pdf/<token>. Le
+    <token> n'est PAS le matricule (voir kyc_token.py) — il est vérifié puis
+    décodé pour retrouver le matricule, ce qui empêche un utilisateur de
+    modifier le lien pour consulter la fiche d'un autre client.
+    Va ensuite chercher les données dans Oracle ACE et ouvre directement le
+    PDF de la fiche KYC, sans passer par l'écran de recherche/édition.
+    Contrairement au parcours normal, les données ne sont donc pas
+    relues/éditées avant impression ici : elles sortent telles quelles de la
+    base.
     """
     from kyc_data import get_kyc_data, ClientIntrouvable, ClientPersonnePhysique
+    from kyc_token import verify_kyc_token
 
-    matricule = (matricule or "").strip()
-    if not matricule:
-        return _kyc_error_page("Merci de préciser un matricule client dans le lien.", 400)
+    try:
+        matricule = verify_kyc_token(token)
+    except ValueError as e:
+        return _kyc_error_page(str(e), 403)
 
     try:
         raw = get_kyc_data(matricule)

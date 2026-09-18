@@ -10,7 +10,7 @@ import time
 
 from flask import Flask, render_template, request, jsonify, Response, session, redirect
 from doc_engine import DOC_TYPES, generate_preview_html
-from kyc_render import render_kyc_html, generate_kyc_pdf
+from kyc_render import render_kyc_html, generate_kyc_pdf, GREEN
 
 app = Flask(__name__)
 # Nécessaire pour signer le cookie de session utilisé par le lien
@@ -304,6 +304,68 @@ def kyc_pdf_direct(matricule):
     return redirect(f"/kyc-morale/{matricule}")
 
 
+def _kyc_loading_page(matricule):
+    """
+    Page affichée instantanément (avant même d'aller chercher quoi que ce
+    soit dans Oracle) : un spinner, pendant que le PDF est généré en
+    arrière-plan via un appel JS (?fetchpdf=1) sur cette même URL, puis
+    affiché dans la page une fois prêt — sans jamais changer l'adresse
+    affichée dans le navigateur.
+    """
+    html_page = f"""<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Fiche KYC</title>
+<style>
+  html, body {{ height:100%; margin:0; }}
+  body {{
+    font-family: Arial, sans-serif;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background:#fafafa; color:#333;
+  }}
+  .spinner {{
+    width:40px; height:40px; border:4px solid #dcdcdc; border-top-color:{GREEN};
+    border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:16px;
+  }}
+  @keyframes spin {{ to {{ transform: rotate(360deg); }} }}
+  #msg {{ font-size:14px; color:#555; }}
+  #err {{ display:none; color:#b00020; text-align:center; padding:0 24px; font-size:14px; }}
+  iframe {{ position:fixed; inset:0; width:100%; height:100%; border:none; display:none; }}
+</style>
+</head>
+<body>
+  <div id="loading">
+    <div class="spinner"></div>
+    <div id="msg">Génération de la fiche KYC en cours…</div>
+  </div>
+  <div id="err"></div>
+  <iframe id="pdfFrame" title="Fiche KYC"></iframe>
+  <script>
+    fetch(window.location.pathname + '?fetchpdf=1')
+      .then(function (res) {{
+        if (!res.ok) {{ throw new Error('HTTP ' + res.status); }}
+        return res.blob();
+      }})
+      .then(function (blob) {{
+        var url = URL.createObjectURL(blob);
+        document.getElementById('loading').style.display = 'none';
+        var frame = document.getElementById('pdfFrame');
+        frame.src = url;
+        frame.style.display = 'block';
+      }})
+      .catch(function () {{
+        document.getElementById('loading').style.display = 'none';
+        var err = document.getElementById('err');
+        err.textContent = "Impossible de charger la fiche KYC (lien expiré ou déjà utilisé). Merci de réessayer depuis l'application d'origine.";
+        err.style.display = 'block';
+      }});
+  </script>
+</body>
+</html>"""
+    return Response(html_page, mimetype="text/html")
+
+
 @app.route("/kyc-morale/<matricule>", methods=["GET"])
 def kyc_morale_clean_url(matricule):
     """
@@ -312,15 +374,31 @@ def kyc_morale_clean_url(matricule):
     unique, valable 30 secondes, portée par un cookie de session signé — pas
     par le matricule/la clé). Visitée directement sans être passé par
     /kyc/pdf-direct au préalable, elle refuse l'accès.
+
+    En deux temps pour permettre un affichage de chargement : le premier
+    chargement (sans ?fetchpdf) renvoie instantanément une page avec spinner,
+    qui va elle-même chercher le PDF en arrière-plan (étape lente : requête
+    Oracle + génération WeasyPrint) sans jamais changer l'URL affichée.
     """
     matricule = (matricule or "").strip()
-    pending = session.pop("kyc_pending", None)
-    if not pending or pending.get("matricule") != matricule or pending.get("exp", 0) < time.time():
+    pending = session.get("kyc_pending")
+    valid = bool(pending) and pending.get("matricule") == matricule and pending.get("exp", 0) > time.time()
+
+    if request.args.get("fetchpdf"):
+        session.pop("kyc_pending", None)  # à usage unique : consommé ici, à l'étape qui sert vraiment le PDF
+        if not valid:
+            return _kyc_error_page(
+                "Accès direct non autorisé ou expiré. Merci d'ouvrir la fiche depuis l'application d'origine.",
+                403,
+            )
+        return _kyc_pdf_response_for_matricule(matricule)
+
+    if not valid:
         return _kyc_error_page(
             "Accès direct non autorisé. Merci d'ouvrir la fiche depuis l'application d'origine.",
             403,
         )
-    return _kyc_pdf_response_for_matricule(matricule)
+    return _kyc_loading_page(matricule)
 
 
 if __name__ == "__main__":

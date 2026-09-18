@@ -120,6 +120,11 @@ def login():
 
 @app.route("/")
 def index():
+    # Le code d'accès est redemandé à chaque chargement de page (F5, nouvel
+    # onglet, etc.) plutôt que mémorisé : plus sûr, quitte à le retaper à
+    # chaque fois. On invalide donc la session ici, systématiquement.
+    session.pop("forma_authed", None)
+
     # On n'envoie au front que ce qui est nécessaire (pas row_map/date_in_label_row)
     doc_types_public = {}
     if SHOW_ATTESTATIONS:
@@ -132,11 +137,7 @@ def index():
             }
             for key, cfg in DOC_TYPES.items()
         }
-    return render_template(
-        "index.html",
-        doc_types=doc_types_public,
-        authed=bool(session.get("forma_authed")),
-    )
+    return render_template("index.html", doc_types=doc_types_public, authed=False)
 
 
 @app.route("/preview", methods=["POST"])

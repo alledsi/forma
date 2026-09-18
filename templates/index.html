@@ -682,6 +682,21 @@ kycSearchBtn.addEventListener('click', async () => {
   let pdfWindow = null;
   if (KYC_DIRECT_TO_PDF) {
     pdfWindow = window.open('', '_blank');
+    if (pdfWindow) {
+      // Évite une page blanche pendant que le PDF se génère côté serveur.
+      pdfWindow.document.open();
+      pdfWindow.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+        <title>Fiche KYC</title>
+        <style>
+          html,body{height:100%;margin:0;font-family:Arial,sans-serif;background:#fafafa;color:#333;}
+          body{display:flex;flex-direction:column;align-items:center;justify-content:center;}
+          .spinner{width:40px;height:40px;border:4px solid #dcdcdc;border-top-color:rgb(2,86,74);
+            border-radius:50%;animation:spin .8s linear infinite;margin-bottom:16px;}
+          @keyframes spin{to{transform:rotate(360deg);}}
+        </style></head>
+        <body><div class="spinner"></div><div>Génération de la fiche KYC en cours…</div></body></html>`);
+      pdfWindow.document.close();
+    }
   }
 
   kycSearchBtn.disabled = true;

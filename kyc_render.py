@@ -227,8 +227,8 @@ def render_kyc_html(data, include_date_line=True):
     parts.append(
         '<div style="display:flex;justify-content:space-between;align-items:baseline;'
         'margin-top:34px;font-size:10.5pt;font-family:Arial, sans-serif;">'
-        '<span>Signature du gérant</span>'
-        '<span>Signature ACEP</span>'
+        '<span style="font-weight:bold;">Signature du gérant</span>'
+        '<span style="font-weight:bold;">Signature ACEP</span>'
         '</div>'
     )
     parts.append(

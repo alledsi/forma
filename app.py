@@ -13,6 +13,15 @@ from doc_engine import DOC_TYPES, generate_preview_html
 from kyc_render import render_kyc_html, generate_kyc_pdf, GREEN
 
 app = Flask(__name__)
+
+# --- Réglages temporaires -----------------------------------------------
+# Le temps de faire monter la fiche KYC en priorité, on masque les 4
+# attestations du menu (le code reste intact, il suffit de repasser ce
+# drapeau à True pour tout réafficher) et on protège l'entrée dans
+# l'application par un code fixe.
+SHOW_ATTESTATIONS = False
+ACCESS_CODE = os.environ.get("FORMA_ACCESS_CODE", "1319")
+# --------------------------------------------------------------------------
 # Nécessaire pour signer le cookie de session utilisé par le lien
 # /kyc-morale/<matricule> (voir plus bas). Valeur par défaut générée
 # aléatoirement ; peut être surchargée via FLASK_SECRET_KEY sur le serveur.
@@ -81,22 +90,57 @@ def _map_infos_fin(row):
     }
 
 
+def require_login(view):
+    """
+    Protège les endpoints de l'appli FORMA elle-même (utilisés par l'écran
+    de connexion par code) — n'a aucun effet sur /kyc/pdf-direct,
+    /kyc-morale et /kyc/token, qui ont leur propre protection par clé/jeton
+    et sont appelés par d'autres applis, pas par un utilisateur connecté ici.
+    """
+    from functools import wraps
+
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        if not session.get("forma_authed"):
+            return jsonify({"error": "Merci de vous reconnecter (code d'accès)."}), 401
+        return view(*args, **kwargs)
+
+    return wrapped
+
+
+@app.route("/login", methods=["POST"])
+def login():
+    payload = request.get_json(force=True) or {}
+    code = str(payload.get("code") or "").strip()
+    if code != ACCESS_CODE:
+        return jsonify({"error": "Code incorrect."}), 401
+    session["forma_authed"] = True
+    return jsonify({"ok": True})
+
+
 @app.route("/")
 def index():
     # On n'envoie au front que ce qui est nécessaire (pas row_map/date_in_label_row)
-    doc_types_public = {
-        key: {
-            "label": cfg["label"],
-            "description": cfg.get("description", ""),
-            "icon": cfg.get("icon", "📄"),
-            "fields": cfg["fields"],
+    doc_types_public = {}
+    if SHOW_ATTESTATIONS:
+        doc_types_public = {
+            key: {
+                "label": cfg["label"],
+                "description": cfg.get("description", ""),
+                "icon": cfg.get("icon", "📄"),
+                "fields": cfg["fields"],
+            }
+            for key, cfg in DOC_TYPES.items()
         }
-        for key, cfg in DOC_TYPES.items()
-    }
-    return render_template("index.html", doc_types=doc_types_public)
+    return render_template(
+        "index.html",
+        doc_types=doc_types_public,
+        authed=bool(session.get("forma_authed")),
+    )
 
 
 @app.route("/preview", methods=["POST"])
+@require_login
 def preview():
     """Retourne un aperçu HTML du document (pas de fichier téléchargeable)."""
     payload = request.get_json(force=True)
@@ -115,6 +159,7 @@ def preview():
 
 
 @app.route("/kyc/lookup", methods=["POST"])
+@require_login
 def kyc_lookup():
     """Recherche un client personne morale dans Oracle ACE par matricule."""
     from kyc_data import get_kyc_data, ClientIntrouvable, ClientPersonnePhysique
@@ -146,6 +191,7 @@ def kyc_lookup():
 
 
 @app.route("/kyc/preview", methods=["POST"])
+@require_login
 def kyc_preview():
     """Rend la fiche KYC en HTML à partir des données (éditées) envoyées par le formulaire."""
     payload = request.get_json(force=True)
@@ -158,6 +204,7 @@ def kyc_preview():
 
 
 @app.route("/kyc/pdf", methods=["POST"])
+@require_login
 def kyc_pdf():
     """
     Génère la fiche KYC en PDF (via WeasyPrint) avec en-tête logo+ACEP et

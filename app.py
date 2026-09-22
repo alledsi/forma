@@ -11,6 +11,7 @@ import time
 from flask import Flask, render_template, request, jsonify, Response, session, redirect
 from doc_engine import DOC_TYPES, generate_preview_html
 from kyc_render import render_kyc_html, generate_kyc_pdf, GREEN
+from groupement_render import render_groupement_html, generate_groupement_pdf
 
 app = Flask(__name__)
 
@@ -20,7 +21,7 @@ app = Flask(__name__)
 # drapeau à True pour tout réafficher) et on protège l'entrée dans
 # l'application par un code fixe.
 SHOW_ATTESTATIONS = False
-ACCESS_CODE = os.environ.get("FORMA_ACCESS_CODE", "1319")
+ACCESS_CODE = os.environ.get("FORMA_ACCESS_CODE", "9131")
 # --------------------------------------------------------------------------
 # Nécessaire pour signer le cookie de session utilisé par le lien
 # /kyc-morale/<matricule> (voir plus bas). Valeur par défaut générée
@@ -87,6 +88,93 @@ def _map_infos_fin(row):
         "resultat_net": row.get("RESULTAT_NET", ""),
         "capital": row.get("CAPITAL", ""),
         "effectif": row.get("EFFECTIF", ""),
+    }
+
+
+def _map_groupement_client_to_form(client):
+    """Traduit les colonnes Oracle (groupement_data) vers les clés de champ du formulaire."""
+    return {
+        "matricule_client": client.get("MATRICULE_CLIENT", ""),
+        "code_bureau": client.get("CODE_BUREAU", ""),
+        "localite": client.get("CODE_LOC", ""),
+        "prefixe_client": client.get("LIB_PREFIXE", ""),
+        "prenom_client": client.get("PRENOM_CLIENT", ""),
+        "statut_client": client.get("STATUT_CLIENT", ""),
+        "raison_sociale_client": client.get("RAISON_SOCIALE_CLIENT", ""),
+        "date_creation_client": client.get("DATE_CRE", ""),
+        "lieu_naissance": client.get("LIEU_NAISSANCE", ""),
+        "date_naissance_entrepreneur": client.get("DATE_NAISSANCE_ENTREPRENEUR", ""),
+        "type_piece": client.get("TYPE_PIECE", ""),
+        "numero_piece_identite": client.get("NUMERO_PIECE_IDENTITE", ""),
+        "lieu_delivrance_piece": client.get("LIEU_DELIVRANCE_PIECE", ""),
+        "date_delivrance_piece": client.get("DATE_DELIVRANCE_PIECE", ""),
+        "date_expiration_piece": client.get("DATE_EXPIRATION_PIECE", ""),
+        "nationalite": client.get("LIB_PAYS", ""),
+        "email": client.get("EMAIL", ""),
+        "telephone": client.get("TEL_PORT", ""),
+        "portable2": client.get("TEL_PORT2", ""),
+        "portable3": client.get("TEL_PORT3", ""),
+        "telephone_domicile": client.get("TEL_DOM", ""),
+        "whatsapp": client.get("NO_WHATSAPP", ""),
+        "prenom_pere": client.get("NOM_PERE", ""),  # NOM_PERE contient déjà le nom complet
+        "prenom_mere": client.get("PRENOM_MERE", ""),
+        "nom_mere": client.get("NOM_MERE", ""),
+        "situation_habitation": client.get("SITUATION_HABITATION", ""),
+        "sms_connect": client.get("SMS_CONNECT", ""),
+        "consentement": client.get("CONSENTEMENT", ""),
+        "numero_consentement": client.get("NO_CONSENT", ""),
+        "employeur": client.get("ID_EMPLOYEUR", ""),
+        "code_cotation": client.get("LIB_COTATION", ""),
+        "profession": client.get("CODE_PROF", ""),
+        "nature": client.get("LIB_NATURE", ""),
+        "code_categorie": client.get("INT_CATEGORIE", ""),
+        "gestionnaire": client.get("NOM_GESTIONNAIRE", ""),
+        "type_ecole": client.get("TYPE_ECOLE", ""),
+        "adresse_entrepreneur": client.get("ADRESSE_1", ""),
+        # Activités
+        "raison_sociale_activite": client.get("RAISON_SOCIALE", ""),
+        "date_creation_entreprise": client.get("DATE_NAISSANCE_ENTREPRENEUR", ""),
+        "activite_principale": client.get("ACTIVITE_PRINCIPALE", ""),
+        "activite_secondaire": client.get("ACTIVITE_SECONDAIRE", ""),
+        "revenu_mensuel": client.get("REVENU_MENSUEL", ""),
+        "origine_revenu": client.get("ORIGINE_REVENU", ""),
+        "no_registre_commerce": client.get("NO_REGISTRE_COMMERCE", ""),
+        "ninea": client.get("NINEA", ""),
+        "adresse_entreprise": client.get("ADRESSE_2", ""),
+        "sous_secteur_activite": client.get("LIB_SSECT", ""),
+        "secteur_activite": client.get("LIB_SECT", ""),
+        "tel_entreprise_fixe": client.get("TEL_ENTREPRISE_FIXE", ""),
+        "tel_entreprise_portable": client.get("TEL_ENTREPRISE_PORTABLE", ""),
+        "contrat_travail": client.get("CONTRAT_TRAVAIL", ""),
+        "tel_portable_bureau": client.get("TEL_PORT_BUREAU", ""),
+        "tel_fixe_bureau": client.get("TEL_FIXE_BUREAU", ""),
+        "date_titularisation": client.get("DATE_TITULARISATION", ""),
+        # PPE
+        "client_ppe": client.get("CLIENT_PPE", ""),
+        "fonction_ppe": client.get("FONCTION_PPE", ""),
+        "pays_fonction_ppe": client.get("PAYS_FONCTION_PPE", ""),
+        "date_debut_fonction": client.get("DATE_DEBUT_FONCTION", ""),
+        "date_fin_fonction": client.get("DATE_FIN_FONCTION", ""),
+        "prenom_par_ppe": client.get("PRENOM_PAR_PPE", ""),
+        "nom_par_ppe": client.get("NOM_PAR_PPE", ""),
+        "lien_parente": client.get("LIEN_PARENTE", ""),
+        "fonction_par_ppe": client.get("FONCTION_PAR_PPE", ""),
+        "pays_par_ppe": client.get("PAYS_PAR_PPE", ""),
+    }
+
+
+def _map_conjoint(row):
+    return {
+        "prenom": row.get("PRENOM", ""), "nom": row.get("NOM", ""),
+        "profession": row.get("PROFESSION", ""), "telephone": row.get("TELEPHONE", ""),
+    }
+
+
+def _map_enfant(row):
+    return {
+        "prenom": row.get("PRENOM", ""), "nom": row.get("NOM", ""),
+        "numero_identite": row.get("NUMERO_IDENTITE", ""),
+        "telephone": row.get("TELEPHONE", ""), "email": row.get("EMAIL", ""),
     }
 
 
@@ -202,6 +290,67 @@ def kyc_preview():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
     return jsonify({"html": html_out})
+
+
+@app.route("/groupement/lookup", methods=["POST"])
+@require_login
+def groupement_lookup():
+    """Recherche un client groupement dans Oracle ACE par matricule."""
+    from groupement_data import get_groupement_data, ClientIntrouvable, ClientPasGroupement
+
+    payload = request.get_json(force=True)
+    matricule = (payload.get("matricule") or "").strip()
+    if not matricule:
+        return jsonify({"error": "Merci de saisir un matricule client."}), 400
+
+    try:
+        data = get_groupement_data(matricule)
+    except ClientIntrouvable as e:
+        return jsonify({"error": str(e)}), 404
+    except ClientPasGroupement as e:
+        return jsonify({"error": str(e)}), 400
+    except RuntimeError as e:
+        return jsonify({"error": str(e)}), 500
+    except Exception as e:
+        return jsonify({"error": f"Erreur de connexion à la base ACE : {e}"}), 500
+
+    return jsonify({
+        "client": _map_groupement_client_to_form(data["client"]),
+        "conjoints": [_map_conjoint(r) for r in data["conjoints"]],
+        "enfants": [_map_enfant(r) for r in data["enfants"]],
+        "membres": [_map_signataire(r) for r in data["membres"]],
+    })
+
+
+@app.route("/groupement/preview", methods=["POST"])
+@require_login
+def groupement_preview():
+    """Rend la fiche KYC groupement en HTML à partir des données envoyées par le formulaire."""
+    payload = request.get_json(force=True)
+    payload.setdefault("date_jour", datetime.date.today().strftime("%d/%m/%Y"))
+    try:
+        html_out = render_groupement_html(payload)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    return jsonify({"html": html_out})
+
+
+@app.route("/groupement/pdf", methods=["POST"])
+@require_login
+def groupement_pdf():
+    """Génère la fiche KYC groupement en PDF (WeasyPrint), même en-tête/pagination que la fiche personne morale."""
+    payload = request.get_json(force=True)
+    payload.setdefault("date_jour", datetime.date.today().strftime("%d/%m/%Y"))
+    try:
+        pdf_bytes = generate_groupement_pdf(payload)
+    except Exception as e:
+        return jsonify({"error": f"Erreur de génération du PDF : {e}"}), 500
+
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": "inline; filename=fiche_kyc_groupement.pdf"},
+    )
 
 
 @app.route("/kyc/pdf", methods=["POST"])

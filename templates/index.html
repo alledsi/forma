@@ -263,6 +263,26 @@
         <h3>Fiche KYC (personne morale)</h3>
         <p>Recherche par matricule client, pré-remplissage depuis ACE, édition avant impression.</p>
       </div>
+      <div class="doc-card" id="groupementCard">
+        <div class="icon">👥</div>
+        <h3>Fiche KYC (groupement)</h3>
+        <p>Recherche par matricule client, pré-remplissage depuis ACE, édition avant impression.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- GROUPEMENT : RECHERCHE -->
+  <section id="screen-groupement-search" class="hidden">
+    <button class="back-link" id="groupementSearchBack">← Retour au menu</button>
+    <h2 class="screen-title">Fiche KYC Groupement — Recherche client</h2>
+    <p class="screen-sub">Saisissez le matricule d'un client groupement.</p>
+    <div class="search-card">
+      <label for="groupementMatricule">Matricule client</label>
+      <input type="text" id="groupementMatricule" placeholder="ex: 00012345">
+      <div class="actions">
+        <button id="groupementSearchBtn">Rechercher</button>
+      </div>
+      <div id="groupementSearchStatus"></div>
     </div>
   </section>
 
@@ -367,6 +387,7 @@ const screens = {
   result: document.getElementById('screen-result'),
   kycSearch: document.getElementById('screen-kyc-search'),
   kycForm: document.getElementById('screen-kyc-form'),
+  groupementSearch: document.getElementById('screen-groupement-search'),
 };
 function showScreen(name) {
   Object.values(screens).forEach(s => s.classList.add('hidden'));
@@ -579,6 +600,18 @@ document.getElementById('kycCard').addEventListener('click', () => {
 document.getElementById('kycSearchBack').addEventListener('click', () => showScreen('menu'));
 document.getElementById('kycFormBack').addEventListener('click', () => showScreen('kycSearch'));
 
+const groupementMatricule = document.getElementById('groupementMatricule');
+const groupementSearchBtn = document.getElementById('groupementSearchBtn');
+const groupementSearchStatus = document.getElementById('groupementSearchStatus');
+
+document.getElementById('groupementCard').addEventListener('click', () => {
+  groupementSearchStatus.textContent = '';
+  groupementSearchStatus.className = '';
+  groupementMatricule.value = '';
+  showScreen('groupementSearch');
+});
+document.getElementById('groupementSearchBack').addEventListener('click', () => showScreen('menu'));
+
 function renderBloc1(values) {
   kycBloc1.innerHTML = '';
   BLOC1_FIELDS.forEach(([key, label]) => {
@@ -770,6 +803,90 @@ kycSearchBtn.addEventListener('click', async () => {
   } finally {
     kycSearchBtn.disabled = false;
     kycSearchBtn.textContent = 'Rechercher';
+  }
+});
+
+/* ===================== FICHE KYC GROUPEMENT ===================== */
+// Même principe que la fiche personne morale : matricule -> PDF direct,
+// sans écran d'édition intermédiaire.
+
+groupementSearchBtn.addEventListener('click', async () => {
+  const matricule = groupementMatricule.value.trim();
+  if (!matricule) {
+    groupementSearchStatus.textContent = 'Merci de saisir un matricule.';
+    groupementSearchStatus.className = 'error';
+    return;
+  }
+
+  // Ouvrir l'onglet tout de suite (geste utilisateur synchrone) : voir le
+  // commentaire équivalent dans le gestionnaire de la fiche personne morale.
+  let pdfWindow = window.open('', '_blank');
+  if (pdfWindow) {
+    pdfWindow.document.open();
+    pdfWindow.document.write(`<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8">
+      <title>Fiche KYC Groupement</title>
+      <style>
+        html,body{height:100%;margin:0;font-family:Arial,sans-serif;background:#fafafa;color:#333;}
+        body{display:flex;flex-direction:column;align-items:center;justify-content:center;}
+        .spinner{width:40px;height:40px;border:4px solid #dcdcdc;border-top-color:rgb(2,86,74);
+          border-radius:50%;animation:spin .8s linear infinite;margin-bottom:16px;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+      </style></head>
+      <body><div class="spinner"></div><div>Génération de la fiche KYC en cours…</div></body></html>`);
+    pdfWindow.document.close();
+  }
+
+  groupementSearchBtn.disabled = true;
+  groupementSearchBtn.textContent = 'Recherche...';
+  groupementSearchStatus.textContent = '';
+  groupementSearchStatus.className = '';
+
+  try {
+    const res = await fetch('/groupement/lookup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ matricule })
+    });
+    const payload = await res.json();
+    if (!res.ok) {
+      const msg = res.status === 404
+        ? (payload.error || `Aucun client trouvé pour le matricule "${matricule}".`)
+        : (payload.error || 'Erreur inconnue.');
+      throw new Error(msg);
+    }
+
+    groupementSearchBtn.textContent = 'Génération du PDF...';
+    const data = {
+      client: payload.client,
+      conjoints: payload.conjoints,
+      enfants: payload.enfants,
+      membres: payload.membres,
+      fait_a: '',
+      le: '',
+    };
+    const pdfRes = await fetch('/groupement/pdf', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    if (!pdfRes.ok) {
+      const errPayload = await pdfRes.json().catch(() => ({}));
+      throw new Error(errPayload.error || 'Erreur de génération du PDF.');
+    }
+    const blob = await pdfRes.blob();
+    const url = URL.createObjectURL(blob);
+    if (pdfWindow) {
+      pdfWindow.location.href = url;
+    } else {
+      window.location.href = url;
+    }
+  } catch (e) {
+    if (pdfWindow) pdfWindow.close();
+    groupementSearchStatus.textContent = e.message;
+    groupementSearchStatus.className = 'error';
+  } finally {
+    groupementSearchBtn.disabled = false;
+    groupementSearchBtn.textContent = 'Rechercher';
   }
 });
 

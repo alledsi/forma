@@ -101,9 +101,14 @@ def _cell(value):
     return v if v.strip() else "&nbsp;"
 
 
-def _bloc1_table(client):
+def _bloc1_table(client, pairs=None):
+    """pairs : liste de (clé_gauche, libellé_gauche, clé_droite, libellé_droite).
+    Par défaut BLOC1_PAIRS (personne morale) ; d'autres fiches (groupement...)
+    peuvent passer leur propre liste pour réutiliser exactement le même rendu
+    visuel (bordures, couleurs, espacement)."""
+    pairs = pairs if pairs is not None else BLOC1_PAIRS
     rows = []
-    for key_l, label_l, key_r, label_r in BLOC1_PAIRS:
+    for key_l, label_l, key_r, label_r in pairs:
         rows.append(
             "<tr>"
             f'<td style="border:1px solid {BORDER};padding:7px 12px;font-weight:bold;'
@@ -251,21 +256,15 @@ def _logo_data_uri():
         return ""
 
 
-def render_kyc_pdf_html(data):
+def wrap_pdf_document(body_html, date_jour, title="Fiche KYC"):
     """
-    Document HTML complet (avec <html>/<head>/<body> et règles @page CSS)
-    utilisé pour générer le PDF de la fiche KYC via WeasyPrint.
-
-    Contrairement à render_kyc_html() (qui ne produit qu'un fragment pour
-    l'aperçu écran), ce document définit un en-tête répété sur chaque page
-    (logo + "ACEP", via un élément "running") et un pied de page avec
-    numérotation ("Page X / Y", via les compteurs CSS natifs) — deux choses
-    que le moteur d'impression natif du navigateur ne sait pas faire.
+    Enveloppe un fragment HTML (déjà rendu par render_kyc_html / une fonction
+    équivalente pour une autre fiche) dans un document complet avec les
+    règles @page WeasyPrint : en-tête répété sur chaque page (logo + "ACEP")
+    et pied de page avec numérotation ("Page X / Y"). Partagé par toutes les
+    fiches PDF de FORMA pour garder un rendu identique.
     """
-    # include_date_line=False : la date n'est plus dans le corps du texte,
-    # elle est affichée dans l'en-tête de page (uniquement page 1, voir @page :first).
-    body = render_kyc_html(data, include_date_line=False)
-    date_jour = _e(data.get("date_jour", "")) or "____ / ____ / ________"
+    date_jour = date_jour or "____ / ____ / ________"
     logo_uri = _logo_data_uri()
     logo_img = (
         f'<img src="{logo_uri}" style="height:22px;vertical-align:middle;margin-right:8px;">'
@@ -276,7 +275,7 @@ def render_kyc_pdf_html(data):
 <html lang="fr">
 <head>
 <meta charset="utf-8">
-<title>Fiche KYC</title>
+<title>{_e(title)}</title>
 <style>
   @page {{
     size: A4;
@@ -323,9 +322,27 @@ def render_kyc_pdf_html(data):
 <body>
   <div id="page-header">{logo_img}<span class="name">ACEP</span></div>
   <div id="page-date">Date : {date_jour}</div>
-  {body}
+  {body_html}
 </body>
 </html>"""
+
+
+def render_kyc_pdf_html(data):
+    """
+    Document HTML complet (avec <html>/<head>/<body> et règles @page CSS)
+    utilisé pour générer le PDF de la fiche KYC via WeasyPrint.
+
+    Contrairement à render_kyc_html() (qui ne produit qu'un fragment pour
+    l'aperçu écran), ce document définit un en-tête répété sur chaque page
+    (logo + "ACEP", via un élément "running") et un pied de page avec
+    numérotation ("Page X / Y", via les compteurs CSS natifs) — deux choses
+    que le moteur d'impression natif du navigateur ne sait pas faire.
+    """
+    # include_date_line=False : la date n'est plus dans le corps du texte,
+    # elle est affichée dans l'en-tête de page (uniquement page 1, voir @page :first).
+    body = render_kyc_html(data, include_date_line=False)
+    date_jour = _e(data.get("date_jour", ""))
+    return wrap_pdf_document(body, date_jour, title="Fiche KYC")
 
 
 def generate_kyc_pdf(data):

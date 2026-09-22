@@ -212,8 +212,8 @@ def render_kyc_html(data, include_date_line=True):
 
     parts.append(
         f'<p style="text-align:right;margin:24px 0 20px;font-size:10.5pt;font-family:Arial, sans-serif;">'
-        f'Fait à : {fait_a or "____________________________"}'
-        f'&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Le : {le or "____________________________"}</p>'
+        f'Fait à {fait_a or "____________________________"}'
+        f'&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Le {le or "____________________________"}</p>'
     )
 
     decl_style = 'style="margin:8px 0;font-size:10.5pt;font-family:Arial, sans-serif;text-align:justify;"'

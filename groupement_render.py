@@ -15,13 +15,40 @@ from kyc_render import (
     _bloc1_table,
     _dynamic_table,
     _label_oui_non,
+    _label_statut_client,
     wrap_pdf_document,
     GOUVERNANCE_COLS,
 )
 
+TYPE_ECOLE_LABELS = {
+    "1": "Préscolaire",
+    "2": "Secondaire",
+    "3": "Enseignement supérieur",
+    "4": "Enseignement technique et professionnel",
+    "5": "Elémentaire",
+}
+
+SITUATION_HABITATION_LABELS = {
+    "L": "Location",
+    "P": "Pleine propriété",
+    "C": "Copropriété",
+    "F": "Partagé (avec la famille)",
+}
+
+
+def _label_type_ecole(v):
+    v = (v or "").strip()
+    return TYPE_ECOLE_LABELS.get(v, v)
+
+
+def _label_situation_habitation(v):
+    v = (v or "").strip().upper()
+    return SITUATION_HABITATION_LABELS.get(v, v)
+
+
 # --- Bloc 1 : identification client (19 lignes, paires gauche/droite) -----
 BLOC1_PAIRS_GROUPEMENT = [
-    ("matricule_client", "Client", "code_bureau", "Bureau"),
+    ("matricule_client", "Matricule Client", "code_bureau", "Bureau"),
     ("localite", "Localité", "prefixe_client", "Préfixe"),
     ("prenom_client", "Prénom", "statut_client", "Statut client"),
     ("raison_sociale_client", "Nom ou raison sociale", "date_creation_client", "Date création client"),
@@ -104,11 +131,14 @@ DECLARATION_3 = (
 
 
 def _prepare_client_display(client):
-    """Copie du client avec les codes O/N traduits en Oui/Non pour l'affichage."""
+    """Copie du client avec les codes traduits en libellés lisibles pour l'affichage."""
     c = dict(client or {})
     c["sms_connect"] = _label_oui_non(c.get("sms_connect"))
     c["consentement"] = _label_oui_non(c.get("consentement"))
     c["client_ppe"] = _label_oui_non(c.get("client_ppe"))
+    c["statut_client"] = _label_statut_client(c.get("statut_client"))
+    c["type_ecole"] = _label_type_ecole(c.get("type_ecole"))
+    c["situation_habitation"] = _label_situation_habitation(c.get("situation_habitation"))
     return c
 
 

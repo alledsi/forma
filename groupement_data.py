@@ -5,10 +5,11 @@ Même logique que kyc_data.py (personne morale) : toutes les colonnes des
 tables enfants (CONJOINT_CLIENT, ENFANT_CLIENT, DIRIGEANT, SIGNATAIRE) sont
 NULLABLE, on neutralise systématiquement les valeurs manquantes.
 
-Contrairement à la personne morale (où PREFIXE_CLIENT = '0' est directement
-comparé), le "groupement" est identifié via son libellé dans la table de
-référence PREFIXE_CLIENT (LIB_PREFIXE), car aucun code numérique fixe n'a été
-communiqué — plus robuste si les codes venaient à changer.
+Aucune vérification du type de client (préfixe) n'est faite ici : les infos
+sont renvoyées pour n'importe quel matricule fourni. Le code de préfixe
+(PREFIXE_CLIENT) et le type de pièce (TYPE_PIECE) sont traduits en libellés
+côté rendu (groupement_render.py) via des tables de correspondance fixes,
+sans jointure Oracle (voir PREFIXE_LABELS / TYPE_PIECE_LABELS).
 """
 import datetime
 import decimal
@@ -20,13 +21,13 @@ SELECT
     c.MATRICULE_CLIENT, c.CODE_BUREAU, c.CODE_LOC, c.PREFIXE_CLIENT,
     c.PRENOM_CLIENT, c.RAISON_SOCIALE_CLIENT, c.STATUT_CLIENT, c.DATE_CRE,
     c.LIEU_NAISSANCE, c.DATE_NAISSANCE, c.DATE_NAISSANCE_ENTREPRENEUR,
-    c.TYPE_PIECE, tp.LIBELLE_TYPE_PIECE, c.NUMERO_PIECE_IDENTITE,
+    c.TYPE_PIECE, c.NUMERO_PIECE_IDENTITE,
     c.LIEU_DELIVRANCE_PIECE, c.DATE_DELIVRANCE_PIECE, c.DATE_EXPIRATION_PIECE,
     c.CODE_NATION, p.LIB_PAYS,
     c.EMAIL, c.TEL_PORT, c.TEL_PORT2, c.TEL_PORT3, c.TEL_DOM, c.NO_WHATSAPP,
     c.NOM_PERE, c.PRENOM_MERE, c.NOM_MERE, c.SITUATION_HABITATION,
     c.SMS_CONNECT, c.CONSENTEMENT, c.NO_CONSENT,
-    c.ID_EMPLOYEUR, c.CODE_COTATION, co.LIB_COTATION,
+    c.ID_EMPLOYEUR, emp.NOM_EMPLOYEUR, c.CODE_COTATION, co.LIB_COTATION,
     c.CODE_PROF, prof.LIB_PROF, c.CODE_NATURE, nc.LIB_NATURE,
     c.CODE_CATEGORIE, cat.INT_CATEGORIE,
     c.CODE_GESTIONNAIRE, g.NOM_GESTIONNAIRE, c.TYPE_ECOLE,
@@ -43,9 +44,8 @@ SELECT
     c.DATE_DEBUT_FONCTION, c.DATE_FIN_FONCTION,
     c.PRENOM_PAR_PPE, c.NOM_PAR_PPE, c.LIEN_PARENTE,
     c.FONCTION_PAR_PPE, c.PAYS_PAR_PPE,
-    pc.LIB_PREFIXE, loc.LIB_LOC
+    loc.LIB_LOC
 FROM CLIENT c
-LEFT JOIN PREFIXE_CLIENT pc ON pc.CODE_PREFIXE = c.PREFIXE_CLIENT
 LEFT JOIN LOCALITE loc ON loc.CODE_LOC = c.CODE_LOC AND loc.CODE_BUREAU = c.CODE_BUREAU
 LEFT JOIN SOUS_SECTEUR ss ON ss.CODE_SSECT = c.CODE_SSECT
 LEFT JOIN SECTEUR se ON se.CODE_SECT = ss.CODE_SECT
@@ -54,9 +54,9 @@ LEFT JOIN COTATION co ON co.CODE_COTATION = c.CODE_COTATION
 LEFT JOIN NAT_CLIENT nc ON nc.CODE_NATURE = c.CODE_NATURE
 LEFT JOIN CATEGORIE cat ON cat.CODE_CATEGORIE = c.CODE_CATEGORIE
 LEFT JOIN GESTIONNAIRE g ON g.CODE_GESTIONNAIRE = c.CODE_GESTIONNAIRE
-LEFT JOIN TYPE_PIECE tp ON tp.CODE_TYPE_PIECE = c.TYPE_PIECE
 LEFT JOIN PROFESSION prof ON prof.CODE_PROF = c.CODE_PROF
 LEFT JOIN TYPE_CONTRAT tc ON tc.CODE_TYPE_CONTRAT = c.CONTRAT_TRAVAIL
+LEFT JOIN EMPLOYEUR emp ON emp.ID_EMPLOYEUR = c.ID_EMPLOYEUR
 WHERE c.MATRICULE_CLIENT = :matricule
 """
 

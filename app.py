@@ -97,14 +97,14 @@ def _map_groupement_client_to_form(client):
         "matricule_client": client.get("MATRICULE_CLIENT", ""),
         "code_bureau": client.get("CODE_BUREAU", ""),
         "localite": client.get("LIB_LOC", ""),
-        "prefixe_client": client.get("LIB_PREFIXE", ""),
+        "prefixe_client": client.get("PREFIXE_CLIENT", ""),
         "prenom_client": client.get("PRENOM_CLIENT", ""),
         "statut_client": client.get("STATUT_CLIENT", ""),
         "raison_sociale_client": client.get("RAISON_SOCIALE_CLIENT", ""),
         "date_creation_client": client.get("DATE_CRE", ""),
         "lieu_naissance": client.get("LIEU_NAISSANCE", ""),
         "date_naissance_entrepreneur": client.get("DATE_NAISSANCE_ENTREPRENEUR", ""),
-        "type_piece": client.get("LIBELLE_TYPE_PIECE", ""),
+        "type_piece": client.get("TYPE_PIECE", ""),
         "numero_piece_identite": client.get("NUMERO_PIECE_IDENTITE", ""),
         "lieu_delivrance_piece": client.get("LIEU_DELIVRANCE_PIECE", ""),
         "date_delivrance_piece": client.get("DATE_DELIVRANCE_PIECE", ""),
@@ -123,7 +123,7 @@ def _map_groupement_client_to_form(client):
         "sms_connect": client.get("SMS_CONNECT", ""),
         "consentement": client.get("CONSENTEMENT", ""),
         "numero_consentement": client.get("NO_CONSENT", ""),
-        "employeur": client.get("ID_EMPLOYEUR", ""),
+        "employeur": client.get("NOM_EMPLOYEUR", ""),
         "code_cotation": client.get("LIB_COTATION", ""),
         "profession": client.get("LIB_PROF", ""),
         "nature": client.get("LIB_NATURE", ""),
@@ -503,6 +503,61 @@ def kyc_pdf_direct(matricule):
         return _kyc_error_page("Merci de préciser un matricule dans le lien.", 400)
 
     return _kyc_pdf_response_for_matricule(matricule)
+
+
+def _groupement_pdf_response_for_matricule(matricule):
+    """Équivalent de _kyc_pdf_response_for_matricule, pour la fiche groupement."""
+    from groupement_data import get_groupement_data, ClientIntrouvable
+
+    try:
+        raw = get_groupement_data(matricule)
+    except ClientIntrouvable as e:
+        return _kyc_error_page(str(e), 404)
+    except RuntimeError as e:
+        return _kyc_error_page(str(e), 500)
+    except Exception as e:
+        return _kyc_error_page(f"Erreur de connexion à la base ACE : {e}", 500)
+
+    payload = {
+        "client": _map_groupement_client_to_form(raw["client"]),
+        "conjoints": [_map_conjoint(r) for r in raw["conjoints"]],
+        "enfants": [_map_enfant(r) for r in raw["enfants"]],
+        "membres": [_map_signataire(r) for r in raw["membres"]],
+        "fait_a": "",
+        "le": "",
+        "date_jour": datetime.date.today().strftime("%d/%m/%Y"),
+    }
+
+    try:
+        pdf_bytes = generate_groupement_pdf(payload)
+    except Exception as e:
+        return _kyc_error_page(f"Erreur de génération du PDF : {e}", 500)
+
+    return Response(
+        pdf_bytes,
+        mimetype="application/pdf",
+        headers={"Content-Disposition": f"inline; filename=fiche_kyc_groupement_{matricule}.pdf"},
+    )
+
+
+@app.route("/groupement/pdf-direct/<matricule>", methods=["GET"])
+def groupement_pdf_direct(matricule):
+    """
+    Lien à donner au développeur pour la fiche groupement — même principe et
+    même clé API que /kyc/pdf-direct (personne morale) : GET
+    /groupement/pdf-direct/<matricule>?key=<clé>, une seule requête, sert le
+    PDF directement.
+    """
+    from kyc_token import check_api_key
+
+    if not check_api_key(request.args.get("key")):
+        return _kyc_error_page("Clé invalide ou manquante (paramètre ?key=...).", 401)
+
+    matricule = (matricule or "").strip()
+    if not matricule:
+        return _kyc_error_page("Merci de préciser un matricule dans le lien.", 400)
+
+    return _groupement_pdf_response_for_matricule(matricule)
 
 
 def _kyc_loading_page(matricule):

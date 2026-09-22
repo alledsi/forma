@@ -35,15 +35,38 @@ SITUATION_HABITATION_LABELS = {
     "F": "Partagé (avec la famille)",
 }
 
+# Pas de jointure Oracle pour ces deux-là : correspondances fixes fournies
+# directement, en dur.
+PREFIXE_LABELS = {
+    "4": "Groupement",
+}
+
+TYPE_PIECE_LABELS = {
+    "C": "Carte Nationale d'identité",
+    "P": "Passeport CDEAO",
+}
+
 
 def _label_type_ecole(v):
     v = (v or "").strip()
+    if v.upper() == "N":
+        return ""
     return TYPE_ECOLE_LABELS.get(v, v)
 
 
 def _label_situation_habitation(v):
     v = (v or "").strip().upper()
     return SITUATION_HABITATION_LABELS.get(v, v)
+
+
+def _label_prefixe(v):
+    v = (v or "").strip()
+    return PREFIXE_LABELS.get(v, v)
+
+
+def _label_type_piece(v):
+    v = (v or "").strip().upper()
+    return TYPE_PIECE_LABELS.get(v, v)
 
 
 # --- Bloc 1 : identification client (19 lignes, paires gauche/droite) -----
@@ -139,6 +162,8 @@ def _prepare_client_display(client):
     c["statut_client"] = _label_statut_client(c.get("statut_client"))
     c["type_ecole"] = _label_type_ecole(c.get("type_ecole"))
     c["situation_habitation"] = _label_situation_habitation(c.get("situation_habitation"))
+    c["prefixe_client"] = _label_prefixe(c.get("prefixe_client"))
+    c["type_piece"] = _label_type_piece(c.get("type_piece"))
     return c
 
 

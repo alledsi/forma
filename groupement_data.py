@@ -19,7 +19,7 @@ SQL_CLIENT = """
 SELECT
     c.MATRICULE_CLIENT, c.CODE_BUREAU, c.CODE_LOC, c.PREFIXE_CLIENT,
     c.PRENOM_CLIENT, c.RAISON_SOCIALE_CLIENT, c.STATUT_CLIENT, c.DATE_CRE,
-    c.LIEU_NAISSANCE, c.DATE_NAISSANCE_ENTREPRENEUR,
+    c.LIEU_NAISSANCE, c.DATE_NAISSANCE, c.DATE_NAISSANCE_ENTREPRENEUR,
     c.TYPE_PIECE, c.NUMERO_PIECE_IDENTITE,
     c.LIEU_DELIVRANCE_PIECE, c.DATE_DELIVRANCE_PIECE, c.DATE_EXPIRATION_PIECE,
     c.CODE_NATION, p.LIB_PAYS,
@@ -108,30 +108,19 @@ class ClientIntrouvable(Exception):
     pass
 
 
-class ClientPasGroupement(Exception):
-    pass
-
-
 def get_groupement_data(matricule):
     """
     Retourne les données KYC groupement complètes pour un matricule donné :
     {client: {...}, conjoints: [...], enfants: [...], membres: [...]}
 
-    Lève ClientIntrouvable si le matricule n'existe pas, ClientPasGroupement
-    si le LIB_PREFIXE (table PREFIXE_CLIENT) du client ne contient pas
-    "GROUPEMENT".
+    Lève ClientIntrouvable si le matricule n'existe pas. Aucune vérification
+    du type de client (préfixe) n'est faite ici : on affiche les infos pour
+    n'importe quel matricule fourni.
     """
     matricule = (matricule or "").strip()
     client = fetch_one(SQL_CLIENT, {"matricule": matricule})
     if client is None:
         raise ClientIntrouvable(f"Aucun client trouvé pour le matricule {matricule}.")
-
-    lib_prefixe = str(client.get("LIB_PREFIXE") or "").strip().upper()
-    if "GROUPEMENT" not in lib_prefixe:
-        raise ClientPasGroupement(
-            f"Le matricule {matricule} ne correspond pas à un groupement "
-            f"(préfixe client : {client.get('LIB_PREFIXE') or 'inconnu'})."
-        )
 
     membres = fetch_all(SQL_DIRIGEANT, {"matricule": matricule}) + fetch_all(
         SQL_SIGNATAIRE, {"matricule": matricule}

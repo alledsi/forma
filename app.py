@@ -133,7 +133,7 @@ def _map_groupement_client_to_form(client):
         "adresse_entrepreneur": client.get("ADRESSE_1", ""),
         # Activités
         "raison_sociale_activite": client.get("RAISON_SOCIALE", ""),
-        "date_creation_entreprise": client.get("DATE_NAISSANCE_ENTREPRENEUR", ""),
+        "date_creation_entreprise": client.get("DATE_NAISSANCE", ""),
         "activite_principale": client.get("ACTIVITE_PRINCIPALE", ""),
         "activite_secondaire": client.get("ACTIVITE_SECONDAIRE", ""),
         "revenu_mensuel": client.get("REVENU_MENSUEL", ""),
@@ -296,7 +296,7 @@ def kyc_preview():
 @require_login
 def groupement_lookup():
     """Recherche un client groupement dans Oracle ACE par matricule."""
-    from groupement_data import get_groupement_data, ClientIntrouvable, ClientPasGroupement
+    from groupement_data import get_groupement_data, ClientIntrouvable
 
     payload = request.get_json(force=True)
     matricule = (payload.get("matricule") or "").strip()
@@ -307,8 +307,6 @@ def groupement_lookup():
         data = get_groupement_data(matricule)
     except ClientIntrouvable as e:
         return jsonify({"error": str(e)}), 404
-    except ClientPasGroupement as e:
-        return jsonify({"error": str(e)}), 400
     except RuntimeError as e:
         return jsonify({"error": str(e)}), 500
     except Exception as e:

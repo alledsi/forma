@@ -332,12 +332,19 @@ def kyc_pdf_by_token(token):
 def kyc_pdf_direct(matricule):
     """
     Lien à appeler côté appelant (ex: PL/SQL Oracle, simple concaténation de
-    chaîne) : GET /kyc/pdf-direct/<matricule>?key=<clé>. Ce n'est pas cette
-    URL que l'utilisateur final garde sous les yeux : une fois la clé
-    vérifiée, on l'autorise pour quelques secondes (cookie de session signé,
-    pas de matricule/clé dedans) puis on le redirige vers l'URL "propre"
-    /kyc-morale/<matricule>, qui sert réellement le PDF. C'est cette 2e URL,
-    sans clé visible, que le navigateur affiche.
+    chaîne) : GET /kyc/pdf-direct/<matricule>?key=<clé>. Sert le PDF
+    directement, en une seule requête — pas de redirection, pas de cookie de
+    session, pas de JavaScript.
+
+    Historique : une version précédente redirigeait vers une URL "propre"
+    /kyc-morale/<matricule> (sans la clé visible), via un cookie de session
+    passant l'autorisation d'une requête à l'autre. Ça fonctionnait en
+    navigation directe (coller le lien dans un navigateur), mais pas depuis
+    l'appli d'un développeur intégrateur : son mécanisme d'ouverture du lien
+    ne transmettait apparemment pas le cookie entre les deux requêtes,
+    laissant une page grise sans PDF. Comme on ne maîtrise pas la façon dont
+    chaque appli appelante ouvre ce lien, on est revenu à une requête unique
+    et sans état, qui ne peut pas casser de cette façon.
     """
     from kyc_token import check_api_key
 
@@ -348,8 +355,7 @@ def kyc_pdf_direct(matricule):
     if not matricule:
         return _kyc_error_page("Merci de préciser un matricule dans le lien.", 400)
 
-    session["kyc_pending"] = {"matricule": matricule, "exp": time.time() + 30}
-    return redirect(f"/kyc-morale/{matricule}")
+    return _kyc_pdf_response_for_matricule(matricule)
 
 
 def _kyc_loading_page(matricule):

@@ -258,12 +258,15 @@
         <p>{{ cfg.description }}</p>
       </div>
       {% endfor %}
-      <div class="doc-card" id="kycCard">
+      <!-- Cartes masquées au niveau appli pour le moment (accès toujours possible
+           via les liens directs donnés aux développeurs intégrateurs) ; repasser
+           la classe "hidden" ci-dessous à rien pour les réafficher dans le menu. -->
+      <div class="doc-card hidden" id="kycCard">
         <div class="icon">🏢</div>
         <h3>Fiche KYC (personne morale)</h3>
         <p>Recherche par matricule client, pré-remplissage depuis ACE, édition avant impression.</p>
       </div>
-      <div class="doc-card" id="groupementCard">
+      <div class="doc-card hidden" id="groupementCard">
         <div class="icon">👥</div>
         <h3>Fiche KYC (groupement)</h3>
         <p>Recherche par matricule client, pré-remplissage depuis ACE, édition avant impression.</p>

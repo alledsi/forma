@@ -20,7 +20,7 @@ app = Flask(__name__)
 # attestations du menu (le code reste intact, il suffit de repasser ce
 # drapeau à True pour tout réafficher) et on protège l'entrée dans
 # l'application par un code fixe.
-SHOW_ATTESTATIONS = False
+SHOW_ATTESTATIONS = True
 ACCESS_CODE = os.environ.get("FORMA_ACCESS_CODE", "9131")
 # --------------------------------------------------------------------------
 # Nécessaire pour signer le cookie de session utilisé par le lien

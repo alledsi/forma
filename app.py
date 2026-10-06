@@ -49,7 +49,7 @@ def _map_client_to_form(client):
         "date_deliv_ninea": client.get("DATE_DELIV_NINEA", ""),
         "sous_secteur": client.get("LIB_SSECT", ""),
         "secteur": secteur,
-        "telephone": client.get("TEL_ENTREPRISE_FIXE", ""),
+        "telephone": client.get("TEL_PORT", ""),
         "email": client.get("EMAIL", ""),
         "adresse": client.get("ADRESSE_1", ""),
         "adresse_postale": client.get("ADRESSE_POST", ""),

@@ -28,7 +28,6 @@ DOC_TYPES = {
         "icon": "💰",
         "template": "ATTESTATION_DE_SOLDE_UM-ACEP.docx",
         "fields": [
-            ("numero", "Numéro de l'attestation (ex: 0123)", "text"),
             ("date_document", "Date de délivrance (ex: 14 août 2026)", "text"),
             ("nom_prenom", "Nom et prénom(s) du titulaire", "text"),
             ("piece_identite", "Nature et n° de la pièce d'identité", "text"),
@@ -48,7 +47,6 @@ DOC_TYPES = {
         "icon": "📈",
         "template": "ATTESTATION_DE_CAPACITE_FINANCIERE_UM-ACEP.docx",
         "fields": [
-            ("numero", "Numéro de l'attestation (ex: 0123)", "text"),
             ("date_document", "Date de délivrance (ex: 14 août 2026)", "text"),
             ("nom_prenom", "Nom et prénom(s) du titulaire", "text"),
             ("piece_identite", "Nature et n° de la pièce d'identité", "text"),
@@ -68,7 +66,6 @@ DOC_TYPES = {
         "icon": "✅",
         "template": "ATTESTATION_DE_NON_ENGAGEMENT_PRET_UM-ACEP.docx",
         "fields": [
-            ("numero", "Numéro de l'attestation (ex: 0123)", "text"),
             ("date_document", "Date de délivrance (ex: 14 août 2026)", "text"),
             ("nom_prenom", "Nom et prénom(s) du titulaire", "text"),
             ("piece_identite", "Nature et n° de la pièce d'identité", "text"),
@@ -88,7 +85,6 @@ DOC_TYPES = {
         "icon": "📄",
         "template": "ATTESTATION_D_ENGAGEMENT_PRET_UM-ACEP.docx",
         "fields": [
-            ("numero", "Numéro de l'attestation (ex: 0123)", "text"),
             ("date_document", "Date de délivrance (ex: 14 août 2026)", "text"),
             ("nom_prenom", "Nom et prénom(s) du titulaire", "text"),
             ("piece_identite", "Nature et n° de la pièce d'identité", "text"),
@@ -147,7 +143,7 @@ def _build_document(doc_type_key, data):
     for p in doc.paragraphs:
         text = "".join(r.text for r in p.runs)
         if "UM-ACEP / DIR" in text:
-            new_text = re.sub(r"N°[^/]*/", f"N° {data.get('numero', '….')} /", text)
+            new_text = re.sub(r"^\s*N°[^/]*/\s*", "", text)
             _set_paragraph_text(p, new_text)
         elif text.strip().startswith("Dakar, le"):
             new_text = re.sub(r"(Dakar, le\s*)[.\s]*$", r"\g<1>" + data.get("date_document", ""), text)

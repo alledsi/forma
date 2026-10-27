@@ -79,11 +79,33 @@ DOC_TYPES = {
                     5: "date_octroi", 6: "montant_initial", 7: "objet_pret", 8: "date_cloture"},
         "date_in_label_row": {},
     },
+    "non_engagement_fp": {
+        "label": "Attestation de non engagement - Fonction publique",
+        "description": "Prêt intégralement remboursé, fonction publique (avec code).",
+        "icon": "🏛️",
+        "template": "ATTESTATION_DE_NON_ENGAGEMENT_PRET_UM-ACEP.docx",
+        "title_line2": "Fonction publique {code}",
+        "fields": [
+            ("date_document", "Date de délivrance (ex: 14 août 2026)", "text"),
+            ("code", "Code (alphanumérique)", "text"),
+            ("nom_prenom", "Nom et prénom(s) du titulaire", "text"),
+            ("piece_identite", "Nature et n° de la pièce d'identité", "text"),
+            ("numero_pret", "N° de prêt / contrat de crédit", "text"),
+            ("date_octroi", "Date d'octroi du prêt", "text"),
+            ("montant_initial", "Montant initial accordé", "text"),
+            ("objet_pret", "Objet du prêt", "text"),
+            ("date_cloture", "Date de remboursement intégral (clôture)", "text"),
+        ],
+        "row_map": {1: "nom_prenom", 2: "piece_identite", 4: "numero_pret",
+                    5: "date_octroi", 6: "montant_initial", 7: "objet_pret", 8: "date_cloture"},
+        "date_in_label_row": {},
+    },
     "engagement": {
         "label": "Attestation d'engagement",
         "description": "Prêt actif en cours de remboursement, situation détaillée.",
         "icon": "📄",
         "template": "ATTESTATION_D_ENGAGEMENT_PRET_UM-ACEP.docx",
+        "signature_title": "Le Directeur Général",
         "fields": [
             ("date_document", "Date de délivrance (ex: 14 août 2026)", "text"),
             ("nom_prenom", "Nom et prénom(s) du titulaire", "text"),
@@ -148,6 +170,38 @@ def _build_document(doc_type_key, data):
         elif text.strip().startswith("Dakar, le"):
             new_text = re.sub(r"(Dakar, le\s*)[.\s]*$", r"\g<1>" + data.get("date_document", ""), text)
             _set_paragraph_text(p, new_text)
+
+    # Titre sur deux lignes (ex: "Fonction publique {code}")
+    if cfg.get("title_line2"):
+        import copy
+        line2 = cfg["title_line2"].replace("{code}", (data.get("code") or "").strip())
+        for p in doc.paragraphs:
+            if p.runs and p.runs[0].text.strip().upper().startswith("ATTESTATION"):
+                first = p.runs[0]
+                for r in p.runs[1:]:
+                    r.text = ""  # supprime les espaces de fin
+                br_r = copy.deepcopy(first._r)
+                for t in br_r.findall(qn("w:t")):
+                    br_r.remove(t)
+                br_r.append(br_r.makeelement(qn("w:br"), {}))
+                txt_r = copy.deepcopy(first._r)
+                for t in txt_r.findall(qn("w:t")):
+                    t.text = line2
+                rpr = txt_r.find(qn("w:rPr"))
+                if rpr is not None:
+                    for tag in ("w:caps", "w:b", "w:bCs"):
+                        for el in rpr.findall(qn(tag)):
+                            rpr.remove(el)
+                first._r.addnext(br_r)
+                br_r.addnext(txt_r)
+                break
+
+    # Libellé de signature (ex: "Le Directeur Général")
+    if cfg.get("signature_title") and len(doc.tables) > 1:
+        for cell in doc.tables[-1].rows[0].cells:
+            for p in cell.paragraphs:
+                if "directeur" in p.text.lower():
+                    _set_paragraph_text(p, cfg["signature_title"])
 
     table = doc.tables[0]
 
@@ -253,6 +307,9 @@ def _render_paragraph(paragraph, density, base_font_size="11pt", align_override=
     align = align_override or _ALIGN_CSS.get(paragraph.alignment, "left")
     spans = []
     for run in paragraph.runs:
+        if run.text == "\n":
+            spans.append("<br>")
+            continue
         text = html.escape(run.text).replace("\t", "&emsp;")
         if text == "":
             continue
